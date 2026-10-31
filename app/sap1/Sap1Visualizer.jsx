@@ -5,7 +5,6 @@ import { flushSync } from "react-dom";
 import { CANVAS, ROOT, nodeAt, cleanPath, decodeWord } from "./sap1Parts";
 import {
   CON_ORDER,
-  SIG,
   PROGRAM,
   bin,
   hex,
@@ -22,6 +21,8 @@ import {
 } from "./sap1Sim";
 import { PALETTES, TEXTBOOK, cssVars } from "./theme";
 import { signalType } from "./signalTypes";
+import { HtmlText, SvgText } from "./sigText";
+import GamePanel, { PANEL_BOXES } from "./GamePanel";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
 // matching CSS variables (--sap-*) set on the page root. An active part is drawn in the color of
@@ -75,58 +76,13 @@ function tween(ms, alive, frame) {
   });
 }
 
+// The box part `id` is drawn in on level `p`: its section on the game front panel (the overview in
+// game mode), otherwise its block in the diagram.
+const partBox = (mode, p, id) =>
+  mode === "game" && p.length === 0 ? PANEL_BOXES[id] : nodeAt(p)?.diagram.blocks.find((b) => b.id === id);
+
 const pathFromHash = () =>
   cleanPath(window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean));
-
-// --- signal names (with bars and subscripts) ------------------------------------------------
-
-function splitSignals(text) {
-  return text
-    .split(/(\{\w+\})/)
-    .filter(Boolean)
-    .map((part) => {
-      const m = /^\{(\w+)\}$/.exec(part);
-      return m && SIG[m[1]] ? { sig: m[1] } : part;
-    });
-}
-
-function SvgText({ text }) {
-  const out = [];
-  let dy = 0; // undo a subscript's baseline shift on the next piece
-  splitSignals(text).forEach((p, i) => {
-    if (typeof p === "string") {
-      out.push(<tspan key={i} dy={dy || undefined}>{p}</tspan>);
-      dy = 0;
-      return;
-    }
-    const s = SIG[p.sig];
-    out.push(
-      <tspan key={i} dy={dy || undefined} style={s.bar ? { textDecoration: "overline" } : undefined}>
-        {s.base}
-      </tspan>
-    );
-    dy = 0;
-    if (s.sub) {
-      out.push(<tspan key={`${i}s`} dy={3} fontSize="0.75em">{s.sub}</tspan>);
-      dy = -3;
-    }
-  });
-  return out;
-}
-
-function Sig({ k }) {
-  const s = SIG[k];
-  return (
-    <span className="whitespace-nowrap">
-      <span style={s.bar ? { textDecoration: "overline" } : undefined}>{s.base}</span>
-      {s.sub && <sub>{s.sub}</sub>}
-    </span>
-  );
-}
-
-function HtmlText({ text }) {
-  return splitSignals(text).map((p, i) => (typeof p === "string" ? <span key={i}>{p}</span> : <Sig key={i} k={p.sig} />));
-}
 
 // --- diagram pieces -------------------------------------------------------------------------
 
@@ -677,6 +633,8 @@ export default function Sap1Visualizer() {
   const pathRef = useRef([]);
   const animToken = useRef(0);
   const busy = useRef(false);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   const node = nodeAt(path) ?? ROOT;
   const d = useMemo(() => derive(sim), [sim]);
@@ -721,8 +679,8 @@ export default function Sap1Visualizer() {
 
     busy.current = true;
     if (into) {
-      const blk = nodeAt(cur).diagram.blocks.find((b) => b.id === next[next.length - 1]);
-      const target = fitBox(blk);
+      const blk = partBox(modeRef.current, cur, next[next.length - 1]);
+      const target = blk ? fitBox(blk) : growBox(0.6);
       if (!(await tween(380, alive, (t) => setView(lerpBox(FULL, target, ease(t)), 1 - smooth(0.55, 1, t))))) return;
       commit(next, push);
       setView(growBox(1.35), 0);
@@ -730,7 +688,7 @@ export default function Sap1Visualizer() {
     } else {
       if (!(await tween(200, alive, (t) => setView(lerpBox(FULL, growBox(1.35), ease(t)), 1 - t)))) return;
       commit(next, push);
-      const blk = nodeAt(next).diagram.blocks.find((b) => b.id === cur[next.length]);
+      const blk = partBox(modeRef.current, next, cur[next.length]);
       const from = blk ? fitBox(blk) : growBox(0.8);
       setView(from, 0);
       if (!(await tween(380, alive, (t) => setView(lerpBox(from, FULL, ease(t)), smooth(0, 0.45, t))))) return;
@@ -805,6 +763,10 @@ export default function Sap1Visualizer() {
     },
     [navigate]
   );
+
+  const openPart = useCallback((id) => navigate([...pathRef.current, id]), [navigate]);
+  // Game mode shows the overview as a front panel; the levels below keep their diagrams.
+  const showPanel = mode === "game" && path.length === 0;
 
   const focusId = hoverId ?? selectedId;
   const focus = node.diagram.blocks.find((b) => b.id === focusId);
@@ -978,7 +940,7 @@ export default function Sap1Visualizer() {
                   viewBox={FULL.join(" ")}
                   className="block h-auto w-full min-w-[680px] select-none"
                   role="img"
-                  aria-label={`${node.title} diagram`}
+                  aria-label={showPanel ? "SAP-1 front panel" : `${node.title} diagram`}
                 >
                   <defs>
                     {[["off", pal.ink], ...Object.entries(pal.type)].map(([id, color]) => (
@@ -998,16 +960,31 @@ export default function Sap1Visualizer() {
                     ))}
                   </defs>
                   <g ref={sceneRef}>
-                    <Diagram
-                      node={node}
-                      path={path}
-                      sim={sim}
-                      d={d}
-                      focusId={focusId}
-                      onEnter={onEnter}
-                      onLeave={onLeave}
-                      onActivate={onActivate}
-                    />
+                    {showPanel ? (
+                      <GamePanel
+                        sim={sim}
+                        d={d}
+                        setSim={setSim}
+                        running={running}
+                        setRunning={setRunning}
+                        onOpen={openPart}
+                        focusId={focusId}
+                        onEnter={onEnter}
+                        onLeave={onLeave}
+                        onActivate={onActivate}
+                      />
+                    ) : (
+                      <Diagram
+                        node={node}
+                        path={path}
+                        sim={sim}
+                        d={d}
+                        focusId={focusId}
+                        onEnter={onEnter}
+                        onLeave={onLeave}
+                        onActivate={onActivate}
+                      />
+                    )}
                   </g>
                 </svg>
               </div>

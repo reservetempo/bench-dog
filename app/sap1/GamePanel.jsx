@@ -1,0 +1,576 @@
+"use client";
+
+// Game mode's overview: a 1970s front panel (think Altair 8800), drawn in SVG in the same 820 × 600
+// coordinates as the block diagrams, so opening a part zooms from its section just as it zooms
+// from a block. Each register is a row of lamps with its value printed underneath. Lamp colors
+// follow the signal type (theme.js TYPE_LED): amber for addresses, green for data, red for control
+// and the output, warm white for the clock, T states and status.
+//
+// Each section stands for one block of the overview diagram (sap1Parts.js ROOT, same ids), so
+// hovering or clicking it drives the info panel and the drill-down exactly like the block does.
+
+import { CANVAS, ROOT, decodeWord } from "./sap1Parts";
+import { CON_ORDER, bin, hex } from "./sap1Sim";
+import { GAME as P } from "./theme";
+import { signalType } from "./signalTypes";
+import { SvgText } from "./sigText";
+
+const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+const SILK = P.ink; // off-white silkscreen lettering
+
+export const PANEL = { w: CANVAS.w, h: CANVAS.h };
+
+// Where each section sits on the panel, by the id of the overview block it stands for.
+export const PANEL_BOXES = {
+  pc: { x: 34, y: 50, w: 120, h: 98 },
+  mar: { x: 162, y: 50, w: 120, h: 98 },
+  ram: { x: 290, y: 50, w: 182, h: 98 },
+  ir: { x: 480, y: 50, w: 306, h: 98 },
+  a: { x: 34, y: 156, w: 182, h: 98 },
+  alu: { x: 224, y: 156, w: 182, h: 98 },
+  b: { x: 414, y: 156, w: 182, h: 98 },
+  bus: { x: 604, y: 156, w: 182, h: 98 },
+  out: { x: 34, y: 262, w: 400, h: 100 },
+  ctrl: { x: 442, y: 262, w: 344, h: 100 },
+  con: { x: 34, y: 370, w: 752, h: 70 },
+};
+
+// The bottom strip, left empty for the switches.
+export const CONTROLS_BOX = { x: 34, y: 450, w: 752, h: 138 };
+
+const BLOCKS = Object.fromEntries(ROOT.diagram.blocks.map((b) => [b.id, b]));
+
+// Who drives the W bus and who loads from it, by the signal that does it.
+const DRIVERS = [["Ep", "PC"], ["CE", "RAM"], ["Ei", "IR"], ["Ea", "A"], ["Eu", "ALU"]];
+const LOADERS = [["Lm", "MAR"], ["Li", "IR"], ["La", "A"], ["Lb", "B"], ["Lo", "OUT"]];
+const whoBy = (list, sig) => list.find(([k]) => sig.has(k))?.[1];
+
+// Is the part behind a section doing something this T state?
+function isActive(id, d) {
+  if (id === "bus") return d.bus !== null;
+  if (id === "con") return d.sig.size > 0;
+  return Boolean(BLOCKS[id].act?.some((k) => d.sig.has(k)));
+}
+
+// Blend two #rrggbb colors (t = 0 → a, 1 → b).
+function mix(a, b, t) {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("")}`;
+}
+
+// --- lamps ----------------------------------------------------------------------------------
+
+// x positions of n lamps centred on cx, `step` apart, with an extra `gap` after every four.
+function lampXs(n, cx, step, gap = 0) {
+  const width = (n - 1) * step + (Math.ceil(n / 4) - 1) * gap;
+  return Array.from({ length: n }, (_, i) => cx - width / 2 + i * step + Math.floor(i / 4) * gap);
+}
+
+// One lamp per bit of value (MSB first). value null: all dark. color: a lamp color or i => color.
+const bitLamps = (value, xs, color) =>
+  xs.map((x, i) => ({
+    x,
+    on: value != null && Boolean((value >> (xs.length - 1 - i)) & 1),
+    color: typeof color === "function" ? color(i) : color,
+  }));
+
+// A row of lamps ({ x, on, color }), drawn in three layers so a lit lamp's glow spills over the
+// panel and its neighbours while its lens stays crisp.
+function Lamps({ lamps, cy, r = 6.5 }) {
+  return (
+    <g>
+      {lamps.map((l, i) => (
+        <g key={`b${i}`}>
+          <circle cx={l.x} cy={cy} r={r + 2.2} fill="#090b0f" stroke="#000" strokeOpacity={0.6} strokeWidth={0.8} />
+          <path
+            d={`M${l.x - r - 1.6} ${cy + 1}a${r + 1.6} ${r + 1.6} 0 0 0 ${2 * r + 3.2} 0`}
+            fill="none"
+            stroke="#fff"
+            strokeOpacity={0.1}
+            strokeWidth={0.8}
+          />
+          {!l.on && <circle cx={l.x} cy={cy} r={r} fill={`url(#gp-off-${l.color})`} />}
+        </g>
+      ))}
+      {lamps.map((l, i) =>
+        l.on ? (
+          <circle key={`h${i}`} cx={l.x} cy={cy} r={r * 2} fill={P.led[l.color].on} opacity={0.42} filter="url(#gp-glow)" />
+        ) : null
+      )}
+      {lamps.map((l, i) => (
+        <g key={`l${i}`}>
+          {l.on && <circle cx={l.x} cy={cy} r={r} fill={`url(#gp-on-${l.color})`} />}
+          <ellipse
+            cx={l.x - r * 0.32}
+            cy={cy - r * 0.4}
+            rx={r * 0.42}
+            ry={r * 0.24}
+            fill="#fff"
+            opacity={l.on ? 0.55 : 0.16}
+          />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+// --- lettering ------------------------------------------------------------------------------
+
+function Silk({ x, y, size = 9, spacing = 1.5, anchor = "middle", weight = 400, fill = SILK, children }) {
+  return (
+    <text x={x} y={y} fontSize={size} fontFamily={FONT} fontWeight={weight} letterSpacing={spacing} textAnchor={anchor} fill={fill}>
+      {children}
+    </text>
+  );
+}
+
+function Readout({ x, y, size = 11.5, anchor = "middle", fill = SILK, children }) {
+  return (
+    <text x={x} y={y} fontSize={size} fontFamily={MONO} textAnchor={anchor} fill={fill} opacity={0.92}>
+      {children}
+    </text>
+  );
+}
+
+// A recessed display window with glowing digits; `ghost` is drawn unlit behind them (all
+// segments, like an unlit seven-segment display).
+function Window({ x, y, w, h, text, ghost, color, size, spacing = 0 }) {
+  const tx = x + w / 2;
+  const ty = y + h / 2 + size * 0.36;
+  const font = { fontSize: size, fontFamily: MONO, fontWeight: 700, letterSpacing: spacing, textAnchor: "middle" };
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx={3} fill="#06080b" stroke="#000" strokeWidth={1} />
+      <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} rx={2.5} fill="none" stroke="#fff" strokeOpacity={0.07} />
+      {ghost && (
+        <text x={tx} y={ty} {...font} fill={P.led[color].off} aria-hidden="true">
+          {ghost}
+        </text>
+      )}
+      <text x={tx} y={ty} {...font} fill={P.led[color].on} filter="url(#gp-text-glow)">
+        {text}
+      </text>
+    </g>
+  );
+}
+
+function PlusMark({ x, y, focused }) {
+  return (
+    <g>
+      <circle cx={x} cy={y} r={6} fill={focused ? SILK : "none"} stroke={SILK} strokeOpacity={focused ? 1 : 0.55} strokeWidth={1} />
+      <path
+        d={`M${x - 3} ${y}h6M${x} ${y - 3}v6`}
+        stroke={focused ? "#1b2029" : SILK}
+        strokeOpacity={focused ? 1 : 0.75}
+        strokeWidth={1.3}
+      />
+    </g>
+  );
+}
+
+// --- case -----------------------------------------------------------------------------------
+
+const TRIM = 20; // walnut side trims
+
+function Defs() {
+  return (
+    <defs>
+      <linearGradient id="gp-metal" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#2c333f" />
+        <stop offset="0.45" stopColor="#232934" />
+        <stop offset="1" stopColor="#1b2029" />
+      </linearGradient>
+      <linearGradient id="gp-sheen" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#fff" stopOpacity="0.05" />
+        <stop offset="0.5" stopColor="#fff" stopOpacity="0" />
+        <stop offset="1" stopColor="#fff" stopOpacity="0.025" />
+      </linearGradient>
+      <pattern id="gp-brush" width="64" height="7" patternUnits="userSpaceOnUse">
+        <rect y="0" width="64" height="0.6" fill="#fff" opacity="0.045" />
+        <rect y="2.2" width="64" height="0.5" fill="#000" opacity="0.14" />
+        <rect y="3.6" width="64" height="0.7" fill="#fff" opacity="0.025" />
+        <rect y="5.3" width="64" height="0.4" fill="#000" opacity="0.09" />
+      </pattern>
+      <linearGradient id="gp-wood" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#3a2013" />
+        <stop offset="0.3" stopColor="#6a3e22" />
+        <stop offset="0.62" stopColor="#7b4927" />
+        <stop offset="1" stopColor="#4a2916" />
+      </linearGradient>
+      <filter id="gp-glow" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="3.2" />
+      </filter>
+      <filter id="gp-text-glow" x="-20%" y="-50%" width="140%" height="200%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+      {Object.entries(P.led).flatMap(([c, { on, off }]) => [
+        <radialGradient key={`on-${c}`} id={`gp-on-${c}`} cx="0.42" cy="0.38" r="0.62">
+          <stop offset="0" stopColor={mix(on, "#ffffff", 0.7)} />
+          <stop offset="0.45" stopColor={on} />
+          <stop offset="1" stopColor={mix(on, "#000000", 0.3)} />
+        </radialGradient>,
+        <radialGradient key={`off-${c}`} id={`gp-off-${c}`} cx="0.42" cy="0.38" r="0.65">
+          <stop offset="0" stopColor={mix(off, "#ffffff", 0.12)} />
+          <stop offset="0.7" stopColor={off} />
+          <stop offset="1" stopColor={mix(off, "#000000", 0.45)} />
+        </radialGradient>,
+      ])}
+    </defs>
+  );
+}
+
+function Trim({ x }) {
+  return (
+    <g>
+      <rect x={x} y={0} width={TRIM} height={PANEL.h} rx={4} fill="url(#gp-wood)" />
+      {[3, 6.5, 9, 12.5, 15, 17.5].map((g, i) => (
+        <path
+          key={i}
+          d={`M${x + g} 0C${x + g + 1.6} 120 ${x + g - 1.4} 260 ${x + g + 0.8} 380S${x + g - 1} 540 ${x + g + 0.4} ${PANEL.h}`}
+          fill="none"
+          stroke="#26130a"
+          strokeOpacity={0.22 + (i % 3) * 0.1}
+          strokeWidth={0.6 + (i % 2) * 0.5}
+        />
+      ))}
+    </g>
+  );
+}
+
+function Case() {
+  const [x, w, h] = [TRIM, PANEL.w - 2 * TRIM, PANEL.h];
+  return (
+    <g>
+      <Trim x={0} />
+      <Trim x={PANEL.w - TRIM} />
+      <rect x={x} y={0} width={w} height={h} fill="url(#gp-metal)" />
+      <rect x={x} y={0} width={w} height={h} fill="url(#gp-brush)" />
+      <rect x={x} y={0} width={w} height={h} fill="url(#gp-sheen)" />
+      <path d={`M${x} 0.5H${x + w}`} stroke="#fff" strokeOpacity={0.14} />
+      <path d={`M${x} ${h - 0.5}H${x + w}`} stroke="#000" strokeOpacity={0.6} />
+      <path d={`M${x + 0.5} 0V${h}M${x + w - 0.5} 0V${h}`} stroke="#000" strokeOpacity={0.55} />
+      <Silk x={36} y={30} anchor="start" size={20} spacing={6} weight={700}>
+        SAP-1
+      </Silk>
+      <Silk x={142} y={29} anchor="start" size={9.5} spacing={3} fill={P.soft}>
+        SIMPLE-AS-POSSIBLE COMPUTER
+      </Silk>
+      <Silk x={784} y={29} anchor="end" size={9} spacing={2} fill={P.muted}>
+        8-BIT · 16 × 8 RAM · 5 INSTRUCTIONS
+      </Silk>
+      <path d="M34 40.5H786" stroke={SILK} strokeOpacity={0.3} />
+    </g>
+  );
+}
+
+// --- sections -------------------------------------------------------------------------------
+
+// A silkscreened box around one part. It acts like the part's block in the diagram: hover or
+// focus shows it in the info panel, click / Enter / Space opens it (or selects it when it has no
+// inside). It is outlined in its signal type's color while the part is active.
+function Section({ id, ctx, title, sub, tx, ty, children }) {
+  const { d, focusId, onEnter, onLeave, onActivate, onOpen } = ctx;
+  const b = PANEL_BOXES[id];
+  const block = BLOCKS[id];
+  const drill = Boolean(ROOT.children?.[id]);
+  const type = signalType(block, { d, path: [] });
+  const hot = P.type[type];
+  const active = isActive(id, d);
+  const focused = focusId === id;
+  const activate = () => (drill ? onOpen(id) : onActivate(block, false));
+  const x = tx ?? b.x + b.w / 2;
+  const y = ty ?? b.y + 18;
+  return (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={drill ? `Open ${block.title}` : block.title}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          activate();
+        }
+      }}
+      onMouseEnter={() => onEnter(id)}
+      onMouseLeave={() => onLeave(id)}
+      onFocus={() => onEnter(id)}
+      onBlur={() => onLeave(id)}
+      style={{ cursor: "pointer", outline: "none" }}
+    >
+      <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={4} fill={focused ? "rgba(232,226,208,0.07)" : "rgba(0,0,0,0.2)"} />
+      {active && <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={4} fill={P.tint[type]} opacity={0.4} />}
+      <rect
+        x={b.x + 0.5}
+        y={b.y + 0.5}
+        width={b.w - 1}
+        height={b.h - 1}
+        rx={3.5}
+        fill="none"
+        stroke={active ? hot : SILK}
+        strokeOpacity={active ? 0.85 : focused ? 0.9 : 0.32}
+        strokeWidth={active || focused ? 1.6 : 0.9}
+      />
+      <Silk x={x} y={y} size={12.5} spacing={3} weight={700} fill={active ? hot : SILK}>
+        {title}
+      </Silk>
+      {sub && (
+        <Silk x={x} y={y + 12} size={8.5} spacing={1.2} fill={P.muted}>
+          {sub}
+        </Silk>
+      )}
+      {drill && <PlusMark x={b.x + b.w - 12} y={b.y + 12} focused={focused} />}
+      {children}
+    </g>
+  );
+}
+
+const B = PANEL_BOXES;
+const mid = (id) => B[id].x + B[id].w / 2;
+const LAMP_Y = 54; // lamp row, from the top of a section
+const READ_Y = 84; // the binary / hex readout under it
+const byte = (v) => `${bin(v)} · ${hex(v)}H`;
+const nibble = (v) => `${bin(v, 4)} · ${hex(v, 1)}H`;
+
+// A plain register: n lamps of one color and its value underneath.
+function Register({ id, ctx, title, sub, value, bits, color }) {
+  const b = B[id];
+  const xs = bits === 4 ? lampXs(4, mid(id), 20) : lampXs(8, mid(id), 18, 6);
+  return (
+    <Section id={id} ctx={ctx} title={title} sub={sub}>
+      <Lamps cy={b.y + LAMP_Y} lamps={bitLamps(value, xs, color)} />
+      <Readout x={mid(id)} y={b.y + READ_Y}>
+        {bits === 4 ? nibble(value) : byte(value)}
+      </Readout>
+    </Section>
+  );
+}
+
+function InstructionRegister({ ctx, ir }) {
+  const b = B.ir;
+  const lx = b.x + 108; // centre of the lamps
+  const win = { x: b.x + 196, y: b.y + 38, w: 96, h: 34 };
+  return (
+    <Section id="ir" ctx={ctx} title="IR" sub="INSTRUCTION REGISTER" tx={lx}>
+      <Lamps
+        cy={b.y + LAMP_Y}
+        lamps={[...bitLamps(ir >> 4, lampXs(4, lx - 38, 18), "green"), ...bitLamps(ir & 15, lampXs(4, lx + 38, 18), "amber")]}
+      />
+      <Silk x={lx - 38} y={b.y + 73} size={8} spacing={1} fill={P.muted}>
+        OP CODE
+      </Silk>
+      <Silk x={lx + 38} y={b.y + 73} size={8} spacing={1} fill={P.muted}>
+        ADDRESS
+      </Silk>
+      <Readout x={lx} y={b.y + 89} size={11}>
+        {byte(ir)}
+      </Readout>
+      <Silk x={win.x + win.w / 2} y={b.y + 30} size={8.5} spacing={1.2} fill={P.muted}>
+        DECODED
+      </Silk>
+      <Window {...win} text={decodeWord(ir) ?? "NOP"} color="green" size={15} />
+    </Section>
+  );
+}
+
+// "A+B" / "A−B" in the corner of the ALU section; red while Su is high.
+function AluBadge({ d }) {
+  const b = B.alu;
+  const red = P.led.red;
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={b.x + 8}
+        y={b.y + 7}
+        width={34}
+        height={15}
+        rx={2}
+        fill={d.su ? red.off : "rgba(0,0,0,0.25)"}
+        stroke={d.su ? red.on : SILK}
+        strokeOpacity={d.su ? 0.9 : 0.4}
+      />
+      <text
+        x={b.x + 25}
+        y={b.y + 18}
+        fontSize={9.5}
+        fontFamily={MONO}
+        fontWeight={700}
+        textAnchor="middle"
+        fill={d.su ? red.on : SILK}
+      >
+        {d.su ? "A−B" : "A+B"}
+      </text>
+    </g>
+  );
+}
+
+function Bus({ ctx, d }) {
+  const b = B.bus;
+  const addr = d.busBits === 4;
+  const xs = lampXs(8, mid("bus"), 18, 6);
+  // An address uses the low four lines (amber); the high four stay dark.
+  const color = (i) => (addr && i >= 4 ? "amber" : "green");
+  const driver = whoBy(DRIVERS, d.sig);
+  const loader = whoBy(LOADERS, d.sig);
+  const sub = d.bus === null ? "NOT DRIVEN" : `${driver} → ${loader ?? "—"}`;
+  return (
+    <Section id="bus" ctx={ctx} title="W BUS" sub={sub}>
+      <Lamps cy={b.y + LAMP_Y} lamps={bitLamps(d.bus, xs, color)} />
+      <Readout x={mid("bus")} y={b.y + READ_Y}>
+        {d.bus === null ? "---- ---- · --" : addr ? nibble(d.bus) : byte(d.bus)}
+      </Readout>
+    </Section>
+  );
+}
+
+function Output({ ctx, out }) {
+  const b = B.out;
+  const lx = b.x + 138;
+  const win = { x: b.x + 266, y: b.y + 36, w: 116, h: 46 };
+  return (
+    <Section id="out" ctx={ctx} title="OUT" sub="OUTPUT REGISTER" tx={lx}>
+      <Lamps cy={b.y + 56} r={9.5} lamps={bitLamps(out, lampXs(8, lx, 28, 8), "red")} />
+      <Readout x={lx} y={b.y + 90}>
+        {byte(out)}
+      </Readout>
+      <Silk x={win.x + win.w / 2} y={b.y + 30} size={8.5} spacing={1.2} fill={P.muted}>
+        DECIMAL
+      </Silk>
+      <Window {...win} text={String(out).padStart(3, "0")} ghost="888" color="red" size={30} spacing={3} />
+    </Section>
+  );
+}
+
+function Controller({ ctx, sim, d }) {
+  const b = B.ctrl;
+  const cy = b.y + 56;
+  const ts = [1, 2, 3, 4, 5, 6].map((t, i) => ({ x: b.x + 26 + i * 30, on: !sim.halted && sim.t === t, color: "white", label: `T${t}` }));
+  const status = [
+    { label: "RUN", on: !sim.prog && !sim.halted },
+    { label: "HALT", on: sim.halted },
+    { label: "PROG", on: sim.prog },
+  ].map((s, i) => ({ ...s, x: b.x + 228 + i * 44, color: "white" }));
+  const state = sim.prog
+    ? "PROG · CLOCK STOPPED"
+    : sim.halted
+      ? "HALTED"
+      : `T${sim.t} · ${sim.t <= 3 ? "FETCH" : `EXECUTE ${d.op}`}`;
+  return (
+    <Section id="ctrl" ctx={ctx} title="CONTROLLER" sub="RING COUNTER · STATUS">
+      <Lamps cy={cy} lamps={[...ts, ...status]} />
+      {[...ts, ...status].map((l) => (
+        <Silk key={l.label} x={l.x} y={b.y + 77} size={8.5} spacing={1} fill={l.on ? P.led.white.on : P.soft}>
+          {l.label}
+        </Silk>
+      ))}
+      <path d={`M${b.x + 200.5} ${b.y + 44}V${b.y + 80}`} stroke={SILK} strokeOpacity={0.3} />
+      <Readout x={mid("ctrl")} y={b.y + 93} size={11}>
+        {state}
+      </Readout>
+    </Section>
+  );
+}
+
+function ControlWord({ ctx, d }) {
+  const b = B.con;
+  const cy = b.y + 42;
+  const xs = CON_ORDER.map((_, i) => b.x + 124 + i * 46);
+  const red = P.led.red;
+  return (
+    <Section id="con" ctx={ctx} title="CON" sub="CONTROL WORD" tx={b.x + 52} ty={b.y + 34}>
+      <Lamps cy={cy} lamps={CON_ORDER.map((k, i) => ({ x: xs[i], on: d.sig.has(k), color: "red" }))} />
+      {CON_ORDER.map((k, i) => (
+        <g key={k}>
+          <text x={xs[i]} y={b.y + 24} fontSize={11.5} fontFamily={FONT} textAnchor="middle" fill={d.sig.has(k) ? red.on : SILK}>
+            <SvgText text={`{${k}}`} />
+          </text>
+          <text x={xs[i]} y={b.y + 63} fontSize={8.5} fontFamily={MONO} textAnchor="middle" fill={P.muted}>
+            {(d.con >> (CON_ORDER.length - 1 - i)) & 1}
+          </text>
+        </g>
+      ))}
+      <Readout x={b.x + b.w - 16} y={b.y + 39} size={17} anchor="end">
+        {`${hex(d.con, 3)}H`}
+      </Readout>
+      <Readout x={b.x + b.w - 16} y={b.y + 55} size={9} anchor="end" fill={P.muted}>
+        {bin(d.con, 12)}
+      </Readout>
+    </Section>
+  );
+}
+
+// The bottom strip: an empty silkscreened area for the switches.
+function Controls({ sim, d, setSim, running, setRunning }) {
+  const b = CONTROLS_BOX;
+  return (
+    <g>
+      <rect
+        x={b.x + 0.5}
+        y={b.y + 0.5}
+        width={b.w - 1}
+        height={b.h - 1}
+        rx={3.5}
+        fill="rgba(0,0,0,0.2)"
+        stroke={SILK}
+        strokeOpacity={0.32}
+        strokeWidth={0.9}
+      />
+      <Silk x={b.x + 14} y={b.y + 19} anchor="start" size={11} spacing={3} weight={700}>
+        CONTROLS
+      </Silk>
+    </g>
+  );
+}
+
+// --- panel ----------------------------------------------------------------------------------
+
+// sim / setSim: the simulator state and its setter. d: derive(sim). running / setRunning: the
+// free-running clock. onOpen(id): open a part (zooms in from its section). focusId: the hovered or
+// selected part; onEnter(id) / onLeave(id) / onActivate(block, drill): the same callbacks the
+// overview blocks use.
+export default function GamePanel({ sim, d, setSim, running, setRunning, onOpen, focusId, onEnter, onLeave, onActivate }) {
+  const ctx = { d, focusId, onEnter, onLeave, onActivate, onOpen };
+  const word = sim.ram[d.ramAddr];
+  return (
+    <g fontFamily={FONT}>
+      <Defs />
+      <Case />
+
+      <Register id="pc" ctx={ctx} title="PC" sub="PROGRAM COUNTER" value={sim.pc} bits={4} color="amber" />
+      <Register
+        id="mar"
+        ctx={ctx}
+        title="MAR"
+        sub={sim.prog ? "ADDR SWITCHES" : "MEMORY ADDRESS"}
+        value={d.ramAddr}
+        bits={4}
+        color="amber"
+      />
+      <Section id="ram" ctx={ctx} title="RAM" sub={`16 × 8 · WORD ${hex(d.ramAddr, 1)}H`}>
+        <Lamps cy={B.ram.y + LAMP_Y} lamps={bitLamps(word, lampXs(8, mid("ram"), 18, 6), "green")} />
+        <Readout x={mid("ram")} y={B.ram.y + READ_Y}>
+          {`[${hex(d.ramAddr, 1)}H] ${byte(word)}`}
+        </Readout>
+      </Section>
+      <InstructionRegister ctx={ctx} ir={sim.ir} />
+
+      <Register id="a" ctx={ctx} title="A" sub="ACCUMULATOR" value={sim.a} bits={8} color="green" />
+      <Register id="alu" ctx={ctx} title="ALU" sub="ADDER-SUBTRACTER" value={d.alu} bits={8} color="green" />
+      <AluBadge d={d} />
+      <Register id="b" ctx={ctx} title="B" sub="B REGISTER" value={sim.b} bits={8} color="green" />
+      <Bus ctx={ctx} d={d} />
+
+      <Output ctx={ctx} out={sim.out} />
+      <Controller ctx={ctx} sim={sim} d={d} />
+      <ControlWord ctx={ctx} d={d} />
+
+      <Controls sim={sim} d={d} setSim={setSim} running={running} setRunning={setRunning} />
+    </g>
+  );
+}
