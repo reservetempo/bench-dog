@@ -1,9 +1,10 @@
 // /app/blog/posts.js
 
-// Hardcoded blog posts. Newest first. `content` is markdown.
-// `slug` becomes the URL: /blog/<slug>
-export const POSTS = [
+// Starter posts, shown only until the first time a post is saved or deleted at /admin.
+// After that, posts live in Cloudinary (blog_data/posts.json) and this file is no longer used.
+export const SEED_POSTS = [
   {
+    id: 'second-post',
     slug: 'second-post',
     title: 'Second Post',
     date: '2026-10-01',
@@ -17,15 +18,12 @@ This is the second post.
 `,
   },
   {
+    id: 'first-post',
     slug: 'first-post',
     title: 'First Post',
     date: '2026-09-01',
     content: `
 Hello! This is the first post on the blog.
-
-Write posts in markdown and add them to the \`POSTS\` array in \`app/blog/posts.js\`.
 `,
   },
 ];
-
-export const getPost = (slug) => POSTS.find((post) => post.slug === slug);
