@@ -24,6 +24,7 @@ import { signalType } from "./signalTypes";
 import { HtmlText, SvgText } from "./sigText";
 import GamePanel, { PANEL_BOXES } from "./GamePanel";
 import GameDiagram, { Pulse, bitsMarker, mix, trimEnd } from "./gameParts";
+import { TourInvite, TourPanel, useTour } from "./Tour.jsx";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
 // matching CSS variables (--sap-*) set on the page root. An active part is drawn in the color of
@@ -650,6 +651,7 @@ export default function Sap1Visualizer() {
 
   const node = nodeAt(path) ?? ROOT;
   const d = useMemo(() => derive(sim), [sim]);
+  const tour = useTour(sim, d);
 
   const setView = (box, opacity) => {
     svgRef.current?.setAttribute("viewBox", box.join(" "));
@@ -745,6 +747,16 @@ export default function Sap1Visualizer() {
     }
   };
 
+  // The guided tour runs on the Game-mode front panel.
+  const backToPanel = () => {
+    chooseMode("game");
+    navigate([], { force: true });
+  };
+  const startTour = (opts) => {
+    backToPanel();
+    tour.start(opts);
+  };
+
   // The one free-running clock: the toolbar's Run / Pause and the panel's AUTO lever both drive
   // `running`, and both rate controls drive `rate`.
   useEffect(() => {
@@ -808,23 +820,38 @@ export default function Sap1Visualizer() {
           </a>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <h1 className="text-4xl font-bold">sap-1</h1>
-            <div role="group" aria-label="View mode" className="flex">
-              {[
-                ["game", "Game"],
-                ["textbook", "Textbook"],
-              ].map(([m, label], i) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={mode === m}
-                  onClick={() => chooseMode(m)}
-                  className={`border border-[color:var(--sap-ink)] px-3 py-1 text-sm ${i ? "-ml-px" : ""} ${
-                    mode === m ? "bg-[color:var(--sap-ink)] text-[color:var(--sap-bg)]" : "hover:bg-[color:var(--sap-hover)]"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                aria-pressed={tour.open}
+                onClick={() => startTour()}
+                title="A guided tour of the front panel"
+                className={`border border-[color:var(--sap-led-amber-on)] px-3 py-1 text-sm ${
+                  tour.open
+                    ? "bg-[color:var(--sap-led-amber-on)] text-[color:var(--sap-on-accent)]"
+                    : "text-[color:var(--sap-led-amber-on)] hover:bg-[color:var(--sap-hover)]"
+                }`}
+              >
+                Tour
+              </button>
+              <div role="group" aria-label="View mode" className="flex">
+                {[
+                  ["game", "Game"],
+                  ["textbook", "Textbook"],
+                ].map(([m, label], i) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={mode === m}
+                    onClick={() => chooseMode(m)}
+                    className={`border border-[color:var(--sap-ink)] px-3 py-1 text-sm ${i ? "-ml-px" : ""} ${
+                      mode === m ? "bg-[color:var(--sap-ink)] text-[color:var(--sap-bg)]" : "hover:bg-[color:var(--sap-hover)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <p className="mt-2 max-w-2xl text-[color:var(--sap-soft)]">
@@ -1008,6 +1035,7 @@ export default function Sap1Visualizer() {
                         onEnter={onEnter}
                         onLeave={onLeave}
                         onActivate={onActivate}
+                        highlight={tour.highlight}
                       />
                     ) : mode === "game" ? (
                       <GameDiagram
@@ -1056,15 +1084,33 @@ export default function Sap1Visualizer() {
               </p>
             </div>
 
-            <Panel
-              node={node}
-              path={path}
-              focus={focus}
-              drill={Boolean(focus && node.children?.[focus.id])}
-              sim={sim}
-              d={d}
-              onOpen={(id) => navigate([...path, id])}
-            />
+            <div className="min-w-0">
+              {tour.open ? (
+                <TourPanel
+                  tour={tour}
+                  sim={sim}
+                  d={d}
+                  offPanel={!showPanel}
+                  onBackToPanel={backToPanel}
+                  onLoadExample={() => setSim((s) => loadExample(s))}
+                  onRestart={() => startTour({ restart: true })}
+                />
+              ) : (
+                tour.invite &&
+                mode === "game" && (
+                  <TourInvite onStart={() => startTour({ restart: true })} onDecline={tour.decline} />
+                )
+              )}
+              <Panel
+                node={node}
+                path={path}
+                focus={focus}
+                drill={Boolean(focus && node.children?.[focus.id])}
+                sim={sim}
+                d={d}
+                onOpen={(id) => navigate([...path, id])}
+              />
+            </div>
           </div>
         </main>
       </div>
