@@ -7,8 +7,11 @@
 // Block:  { id, x, y, w, h, kind?, tag?, title, sub?, value?(s, d), act?: [signals], about }
 //         kind: 'chip' (default) | 'switch' | 'bus' | 'display' | 'con'
 // Group:  { x, y, w, h, label, value?(s, d), act? }        dashed frame around chips
-// Wire:   { pts: [[x, y], ...], bits?, bitsAt?: [x, y], on?: signal, arrow?: false, label?, labelAt?, anchor?, dots? }
-// Pin:    { sig, at: [x, y], dir: 'left' | 'right' | 'up' | 'down', len? }   short control-signal stub
+// Wire:   { pts: [[x, y], ...], bits?, bitsAt?: [x, y], on?: signal, arrow?: false, label?, labelAt?, anchor?, dots?, type? }
+// Pin:    { sig, at: [x, y], dir: 'left' | 'right' | 'up' | 'down', len?, type? }   short control-signal stub
+//
+// type ('address' | 'data' | 'control' | 'status' | 'output') is only given where signalType() in
+// signalTypes.js can't work it out from the bit width or the signal (see there).
 
 import { OPS, bin, hex, ramAddr } from './sap1Sim';
 
@@ -80,16 +83,16 @@ const clock = {
     wires: [
       { pts: [[170, 62], [220, 62]] },
       { pts: [[390, 62], [790, 62]], label: 'CLR → IR  ·  {CLR_} → PC, ring counter, C29', labelAt: [590, 52] },
-      { pts: [[170, 172], [220, 172]] },
-      { pts: [[390, 172], [450, 172]] },
+      { pts: [[170, 172], [220, 172]], type: 'status' },
+      { pts: [[390, 172], [450, 172]], type: 'status' },
       { pts: [[170, 282], [220, 282]] },
       { pts: [[390, 270], [420, 270], [420, 195], [450, 195]], label: 'manual', labelAt: [426, 238], anchor: 'start' },
       { pts: [[390, 294], [420, 294], [420, 390], [450, 390]], label: 'auto', labelAt: [426, 348], anchor: 'start' },
-      { pts: [[170, 402], [220, 402]], label: '2 kHz', labelAt: [195, 394] },
-      { pts: [[390, 418], [450, 418]], label: '1 kHz', labelAt: [420, 410] },
-      { pts: [[525, 204], [525, 370]], label: 'single step', labelAt: [533, 290], anchor: 'start' },
-      { pts: [[600, 402], [650, 402]] },
-      { pts: [[720, 434], [720, 478]], label: 'CLK, {CLK_} to the computer', labelAt: [720, 496] },
+      { pts: [[170, 402], [220, 402]], type: 'status', label: '2 kHz', labelAt: [195, 394] },
+      { pts: [[390, 418], [450, 418]], type: 'status', label: '1 kHz', labelAt: [420, 410] },
+      { pts: [[525, 204], [525, 370]], type: 'status', label: 'single step', labelAt: [533, 290], anchor: 'start' },
+      { pts: [[600, 402], [650, 402]], type: 'status' },
+      { pts: [[720, 434], [720, 478]], type: 'status', label: 'CLK, {CLK_} to the computer', labelAt: [720, 496] },
       { pts: [[390, 535], [790, 535]], label: '+5 V to every chip', labelAt: [590, 525] },
     ],
     pins: [
@@ -124,7 +127,7 @@ const pc = {
     wires: [
       { pts: [[90, 60], [580, 60], [580, 100]], on: 'Cp', label: '{Cp}', labelAt: [84, 64], anchor: 'end', dots: [[300, 60]] },
       { pts: [[300, 60], [300, 100]], on: 'Cp' },
-      { pts: [[90, 150], [200, 150]], label: '{CLK_}', labelAt: [84, 154], anchor: 'end' },
+      { pts: [[90, 150], [200, 150]], type: 'status', label: '{CLK_}', labelAt: [84, 154], anchor: 'end' },
       { pts: [[400, 150], [480, 150]], label: 'ripple', labelAt: [440, 142] },
       { pts: [[350, 200], [350, 330]], bits: 2 },
       { pts: [[630, 200], [630, 330]], bits: 2 },
@@ -196,11 +199,11 @@ const ram = {
     ],
     wires: [
       { pts: [[40, 120], [560, 120], [560, 190]], bits: 4, bitsAt: [140, 120], on: 'CE', label: 'address from C5', labelAt: [140, 110], dots: [[300, 120]] },
-      { pts: [[300, 120], [300, 190]], on: 'CE' },
-      { pts: [[260, 470], [260, 320]], bits: 4, bitsAt: [260, 355], label: 'data in', labelAt: [268, 448], anchor: 'start' },
-      { pts: [[520, 470], [520, 320]], bits: 4, bitsAt: [520, 355] },
+      { pts: [[300, 120], [300, 190]], on: 'CE', type: 'address' },
+      { pts: [[260, 470], [260, 320]], bits: 4, type: 'data', bitsAt: [260, 355], label: 'data in', labelAt: [268, 448], anchor: 'start' },
+      { pts: [[520, 470], [520, 320]], bits: 4, type: 'data', bitsAt: [520, 355] },
       { pts: [[360, 320], [360, 400], [790, 400]], arrow: true, bits: 8, bitsAt: [740, 400], on: 'CE', label: 'to W bus', labelAt: [740, 390], dots: [[620, 400]] },
-      { pts: [[620, 320], [620, 400]], arrow: false, on: 'CE' },
+      { pts: [[620, 320], [620, 400]], arrow: false, on: 'CE', type: 'data' },
     ],
     pins: [
       { sig: 'CE', at: [250, 190], dir: 'up', len: 30 },
@@ -229,9 +232,9 @@ const ir = {
     ],
     wires: [
       { pts: [[30, 260], [140, 260]], bits: 8, on: 'Li', label: 'from W bus', labelAt: [80, 250] },
-      { pts: [[140, 260], [140, 150], [260, 150]], bits: 4, on: 'Li', label: 'bits 7–4', labelAt: [200, 140], dots: [[140, 260]] },
-      { pts: [[140, 260], [140, 370], [260, 370]], bits: 4, on: 'Li', label: 'bits 3–0', labelAt: [200, 360] },
-      { pts: [[500, 150], [790, 150]], bits: 4, label: 'to instruction decoder', labelAt: [645, 140] },
+      { pts: [[140, 260], [140, 150], [260, 150]], bits: 4, on: 'Li', type: 'data', label: 'bits 7–4', labelAt: [200, 140], dots: [[140, 260]] },
+      { pts: [[140, 260], [140, 370], [260, 370]], bits: 4, on: 'Li', type: 'data', label: 'bits 3–0', labelAt: [200, 360] },
+      { pts: [[500, 150], [790, 150]], bits: 4, type: 'data', label: 'to instruction decoder', labelAt: [645, 140] },
       { pts: [[500, 370], [790, 370]], bits: 4, on: 'Ei', label: 'to W bus', labelAt: [645, 360] },
     ],
     pins: [
@@ -268,13 +271,13 @@ const ctrl = {
         about: 'Makes CLK, {CLK_}, CLR and {CLR_} and powers the board. Open it to see the parts.' },
     ],
     wires: [
-      { pts: [[30, 130], [170, 130]], bits: 4, label: 'op code from IR', labelAt: [100, 120] },
-      { pts: [[390, 130], [480, 130]], bits: 4, label: 'LDA…OUT', labelAt: [435, 120] },
+      { pts: [[30, 130], [170, 130]], bits: 4, type: 'data', label: 'op code from IR', labelAt: [100, 120] },
+      { pts: [[390, 130], [480, 130]], bits: 4, type: 'control', label: 'LDA…OUT', labelAt: [435, 120] },
       { pts: [[390, 330], [480, 330]], bits: 6, label: 'T1–T6', labelAt: [435, 320] },
       { pts: [[680, 230], [790, 230]], bits: 12, label: 'CON', labelAt: [735, 220] },
-      { pts: [[280, 470], [280, 390]], label: 'CLK', labelAt: [290, 435], anchor: 'start' },
-      { pts: [[390, 520], [790, 520]], label: 'CLK, {CLK_}, CLR, {CLR_} to the registers', labelAt: [590, 510] },
-      { pts: [[170, 165], [110, 165], [110, 530], [170, 530]], label: '{HLT_}', labelAt: [102, 352], anchor: 'end' },
+      { pts: [[280, 470], [280, 390]], type: 'status', label: 'CLK', labelAt: [290, 435], anchor: 'start' },
+      { pts: [[390, 520], [790, 520]], type: 'status', label: 'CLK, {CLK_}, CLR, {CLR_} to the registers', labelAt: [590, 510] },
+      { pts: [[170, 165], [110, 165], [110, 530], [170, 530]], type: 'status', label: '{HLT_}', labelAt: [102, 352], anchor: 'end' },
     ],
   },
   children: { clock },
@@ -402,7 +405,7 @@ const out = (() => {
       ],
       wires: [
         { pts: [[30, 185], [200, 185]], bits: 8, on: 'Lo', label: 'from W bus', labelAt: [115, 175] },
-        { pts: [[410, 260], [410, 400]], bits: 8 },
+        { pts: [[410, 260], [410, 400]], bits: 8, type: 'output' },
       ],
       pins: reg.pins,
     },
@@ -454,7 +457,7 @@ export const ROOT = {
       { pts: [[320, 265], [396, 265]], bits: 8, on: 'CE' },
       { pts: [[396, 348], [320, 348]], bits: 8, on: 'Li' },
       { pts: [[320, 376], [396, 376]], bits: 4, on: 'Ei' },
-      { pts: [[215, 394], [215, 440]], bits: 4 },
+      { pts: [[215, 394], [215, 440]], bits: 4, type: 'data' },
       { pts: [[424, 60], [500, 60]], bits: 8, on: 'La' },
       { pts: [[500, 88], [424, 88]], bits: 8, on: 'Ea' },
       { pts: [[605, 106], [605, 136]], bits: 8 },
@@ -462,7 +465,7 @@ export const ROOT = {
       { pts: [[605, 232], [605, 202]], bits: 8 },
       { pts: [[424, 265], [500, 265]], bits: 8, on: 'Lb' },
       { pts: [[424, 361], [500, 361]], bits: 8, on: 'Lo' },
-      { pts: [[605, 394], [605, 440]], bits: 8 },
+      { pts: [[605, 394], [605, 440]], bits: 8, type: 'output' },
       { pts: [[215, 520], [215, 548]], bits: 12 },
     ],
     pins: [

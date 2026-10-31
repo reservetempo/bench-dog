@@ -35,10 +35,6 @@ export const PROGRAM = [
   0x09, 0x1a, 0x1b, 0x2c, 0xe0, 0xf0, 0xff, 0xff,
   0xff, 0x01, 0x02, 0x03, 0x04, 0xff, 0xff, 0xff,
 ];
-export const LISTING = [
-  'LDA 9H', 'ADD AH', 'ADD BH', 'SUB CH', 'OUT', 'HLT', '—', '—',
-  '—', 'data 1', 'data 2', 'data 3', 'data 4', '—', '—', '—',
-];
 
 // Microprogram (Table 10-5). Fetch is the same for every instruction.
 const FETCH = [['Ep', 'Lm'], ['Cp'], ['CE', 'Li']];
@@ -145,7 +141,7 @@ export function derive(s) {
 
 export function describe(s) {
   if (s.prog) return `PROG: the address switches (S1) select RAM word ${hex(s.addrSw & 0xf, 1)}H. Set the data switches (S3) and press WRITE (S4) to store them there.`;
-  if (s.halted) return 'HLT is in the instruction register, so the clock has stopped. Reset to run again.';
+  if (s.halted) return 'HLT is in the instruction register, so the clock has stopped. Press Clear to run again.';
   if (s.t <= 3) return FETCH_TEXT[s.t - 1];
   return EXEC_TEXT[opName(s.ir)]?.[s.t - 4] ?? 'No operation.';
 }

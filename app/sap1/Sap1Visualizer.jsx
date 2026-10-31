@@ -20,16 +20,19 @@ import {
   toggleDataBit,
   write,
 } from "./sap1Sim";
-import { TEXTBOOK, cssVars } from "./theme";
+import { PALETTES, TEXTBOOK, cssVars } from "./theme";
+import { signalType } from "./signalTypes";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
-// matching CSS variables (--sap-*) set on the page root.
+// matching CSS variables (--sap-*) set on the page root. An active part is drawn in the color of
+// its signal type (pal.type[signalType(...)]); in the textbook look every type is the same red.
 const PaletteContext = createContext(TEXTBOOK);
 const usePalette = () => useContext(PaletteContext);
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const FULL = [0, 0, CANVAS.w, CANVAS.h];
 const STEP_MS = 550;
+const MODE_KEY = "sap1-mode"; // localStorage: "game" | "textbook"
 
 // --- geometry & animation helpers -----------------------------------------------------------
 
@@ -149,7 +152,8 @@ function bitsMarker(pts, at) {
 function Wire({ w, d }) {
   const P = usePalette();
   const on = Boolean(w.on && d.sig.has(w.on));
-  const color = on ? P.accent : P.ink;
+  const type = signalType(w);
+  const color = on ? P.type[type] : P.ink;
   const m = w.bits ? bitsMarker(w.pts, w.bitsAt) : null;
   return (
     <g>
@@ -159,7 +163,7 @@ function Wire({ w, d }) {
         stroke={color}
         strokeWidth={on ? 2.5 : 1.5}
         strokeLinejoin="round"
-        markerEnd={w.arrow === false ? undefined : `url(#sap1-arrow-${on ? "on" : "off"})`}
+        markerEnd={w.arrow === false ? undefined : `url(#sap1-arrow-${on ? type : "off"})`}
       />
       {m && (
         <g>
@@ -176,7 +180,7 @@ function Wire({ w, d }) {
             y={m.h ? m.y + 19 : m.y + 4}
             textAnchor={m.h ? "middle" : "start"}
             fontSize={11}
-            fill={on ? P.accent : P.muted}
+            fill={on ? color : P.muted}
           >
             {w.bits}
           </text>
@@ -184,7 +188,7 @@ function Wire({ w, d }) {
       )}
       {w.dots?.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={3.5} fill={color} />)}
       {w.label && (
-        <text x={w.labelAt[0]} y={w.labelAt[1]} textAnchor={w.anchor ?? "middle"} fontSize={12} fill={on ? P.accent : P.muted}>
+        <text x={w.labelAt[0]} y={w.labelAt[1]} textAnchor={w.anchor ?? "middle"} fontSize={12} fill={on ? color : P.muted}>
           <SvgText text={w.label} />
         </text>
       )}
@@ -195,7 +199,7 @@ function Wire({ w, d }) {
 function Pin({ p, d }) {
   const P = usePalette();
   const on = CON_ORDER.includes(p.sig) && d.sig.has(p.sig);
-  const color = on ? P.accent : P.ink;
+  const color = on ? P.type[signalType(p)] : P.ink;
   const len = p.len ?? 30;
   const [x, y] = p.at;
   let [x2, y2, lx, ly, anchor] = [x, y, x, y, "middle"];
@@ -213,9 +217,10 @@ function Pin({ p, d }) {
   );
 }
 
-function Group({ g, sim, d }) {
+function Group({ g, sim, d, path }) {
   const P = usePalette();
   const active = g.act?.some((k) => d.sig.has(k));
+  const hot = P.type[signalType(g, { d, path })];
   const value = g.value?.(sim, d);
   return (
     <g>
@@ -226,7 +231,7 @@ function Group({ g, sim, d }) {
         height={g.h}
         rx={6}
         fill="none"
-        stroke={active ? P.accent : P.frame}
+        stroke={active ? hot : P.frame}
         strokeWidth={active ? 2 : 1.2}
         strokeDasharray="5 4"
       />
@@ -234,7 +239,7 @@ function Group({ g, sim, d }) {
         {g.label.toUpperCase()}
       </text>
       {value && (
-        <text x={g.x + g.w - 10} y={g.y + 19} textAnchor="end" fontSize={12.5} fontFamily={MONO} fill={active ? P.accent : P.ink}>
+        <text x={g.x + g.w - 10} y={g.y + 19} textAnchor="end" fontSize={12.5} fontFamily={MONO} fill={active ? hot : P.ink}>
           {value}
         </text>
       )}
@@ -252,8 +257,8 @@ function Leds({ cx, cy, value }) {
         cx={cx - 77 + i * 22}
         cy={cy}
         r={7}
-        fill={lit ? P.accent : P.ledOff}
-        stroke={lit ? P.accent : P.frame}
+        fill={lit ? P.type.output : P.typeOff.output}
+        stroke={lit ? P.type.output : P.frame}
         strokeWidth={1.5}
       />
     );
@@ -275,7 +280,7 @@ function ConRow({ b, d }) {
               y={b.y}
               width={cell}
               height={b.h}
-              fill={on ? P.accent : P.block}
+              fill={on ? P.type.control : P.block}
               stroke={P.ink}
               strokeWidth={1.2}
             />
@@ -295,9 +300,11 @@ function ConRow({ b, d }) {
   );
 }
 
-function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
+function Block({ b, sim, d, path, drill, focused, onEnter, onLeave, onActivate }) {
   const P = usePalette();
   const active = b.kind === "bus" ? d.bus !== null : Boolean(b.act?.some((k) => d.sig.has(k)));
+  const type = signalType(b, { d, path });
+  const [hot, tint] = [P.type[type], P.tint[type]];
   const name = [b.tag, b.title].filter(Boolean).join(" ");
   const handlers = {
     role: "button",
@@ -336,8 +343,8 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
           y={b.y}
           width={b.w}
           height={b.h}
-          fill={active ? P.accentTint : focused ? P.hoverStrong : P.hover}
-          stroke={active ? P.accent : P.ink}
+          fill={active ? tint : focused ? P.hoverStrong : P.hover}
+          stroke={active ? hot : P.ink}
           strokeWidth={active || focused ? 2.5 : 1.5}
         />
         <text x={cx} y={b.y - 8} textAnchor="middle" fontSize={13} fontWeight={700} fill={P.ink}>
@@ -350,7 +357,7 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
           textAnchor="middle"
           fontSize={13}
           fontFamily={MONO}
-          fill={active ? P.accent : P.muted}
+          fill={active ? hot : P.muted}
         >
           {d.bus === null ? "not driven" : bin(d.bus, d.busBits)}
         </text>
@@ -361,7 +368,7 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
   const value = b.value?.(sim, d);
   const lines = [{ text: b.title, size: 15, weight: 700, fill: P.ink }];
   if (b.sub) lines.push({ text: b.sub, size: 12, fill: P.muted });
-  if (value != null) lines.push({ text: value, size: 13, mono: true, fill: active ? P.accent : P.ink });
+  if (value != null) lines.push({ text: value, size: 13, mono: true, fill: active ? hot : P.ink });
   if (b.kind === "display") lines.push({ leds: true, size: 16 });
   const gap = 6;
   const total = lines.reduce((sum, l) => sum + l.size, 0) + gap * (lines.length - 1);
@@ -376,8 +383,8 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
         width={b.w}
         height={b.h}
         rx={b.kind === "switch" ? 12 : 3}
-        fill={active ? P.accentTint : focused ? P.hover : b.kind === "switch" ? P.blockAlt : P.block}
-        stroke={active ? P.accent : P.ink}
+        fill={active ? tint : focused ? P.hover : b.kind === "switch" ? P.blockAlt : P.block}
+        stroke={active ? hot : P.ink}
         strokeWidth={active || focused ? 2.5 : 1.5}
       />
       {b.tag && (
@@ -418,12 +425,12 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
   );
 }
 
-function Diagram({ node, sim, d, focusId, onEnter, onLeave, onActivate }) {
+function Diagram({ node, path, sim, d, focusId, onEnter, onLeave, onActivate }) {
   const P = usePalette();
   const dg = node.diagram;
   return (
     <>
-      {dg.groups?.map((g, i) => <Group key={`g${i}`} g={g} sim={sim} d={d} />)}
+      {dg.groups?.map((g, i) => <Group key={`g${i}`} g={g} sim={sim} d={d} path={path} />)}
       {dg.wires?.map((w, i) => <Wire key={`w${i}`} w={w} d={d} />)}
       {dg.pins?.map((p, i) => <Pin key={`p${i}`} p={p} d={d} />)}
       {dg.notes?.map((n, i) => (
@@ -437,6 +444,7 @@ function Diagram({ node, sim, d, focusId, onEnter, onLeave, onActivate }) {
           b={b}
           sim={sim}
           d={d}
+          path={path}
           drill={Boolean(node.children?.[b.id])}
           focused={focusId === b.id}
           onEnter={onEnter}
@@ -497,7 +505,7 @@ function Memory({ sim, d }) {
                 aria-current={here ? "true" : undefined}
                 className={
                   hot
-                    ? "bg-[color:var(--sap-accent-tint)] text-[color:var(--sap-accent)]"
+                    ? "bg-[color:var(--sap-tint-data)] text-[color:var(--sap-type-data)]"
                     : here
                       ? "bg-[color:var(--sap-hover)]"
                       : ""
@@ -525,8 +533,14 @@ function Memory({ sim, d }) {
   );
 }
 
+// Lit bit switches take the color of what they set: an address or a data byte.
+const BIT_ON = {
+  address: "border-[color:var(--sap-type-address)] bg-[color:var(--sap-type-address)] text-[color:var(--sap-on-accent)]",
+  data: "border-[color:var(--sap-type-data)] bg-[color:var(--sap-type-data)] text-[color:var(--sap-on-accent)]",
+};
+
 // One front-panel bit switch: shows 0 or 1, lit when 1.
-function BitButton({ caption, label, on, onClick, className = "" }) {
+function BitButton({ caption, label, type, on, onClick, className = "" }) {
   return (
     <span className={`flex flex-col items-center gap-0.5 ${className}`}>
       <span aria-hidden="true" className="font-mono text-[10px] text-[color:var(--sap-muted)]">
@@ -538,9 +552,7 @@ function BitButton({ caption, label, on, onClick, className = "" }) {
         aria-pressed={on}
         onClick={onClick}
         className={`h-7 w-7 border font-mono text-sm ${
-          on
-            ? "border-[color:var(--sap-accent)] bg-[color:var(--sap-accent)] text-[color:var(--sap-on-accent)]"
-            : "border-[color:var(--sap-ink)] hover:bg-[color:var(--sap-hover)]"
+          on ? BIT_ON[type] : "border-[color:var(--sap-ink)] hover:bg-[color:var(--sap-hover)]"
         }`}
       >
         {on ? 1 : 0}
@@ -562,6 +574,7 @@ function ProgSwitches({ sim, onAddrBit, onDataBit, onWrite }) {
               key={i}
               caption={`A${i}`}
               label={`Address bit ${i}`}
+              type="address"
               on={Boolean((addr >> i) & 1)}
               onClick={() => onAddrBit(i)}
             />
@@ -573,6 +586,7 @@ function ProgSwitches({ sim, onAddrBit, onDataBit, onWrite }) {
               key={i}
               caption={`D${i}`}
               label={`Data bit ${i}`}
+              type="data"
               on={Boolean((sim.dataSw >> i) & 1)}
               onClick={() => onDataBit(i)}
               className={i === 3 ? "ml-2" : ""}
@@ -648,7 +662,10 @@ function Panel({ node, path, focus, drill, sim, d, onOpen }) {
 // --- main -----------------------------------------------------------------------------------
 
 export default function Sap1Visualizer() {
-  const pal = TEXTBOOK;
+  // "game" (the default) or "textbook". The server and the first client render use the default;
+  // a saved choice is read after hydration.
+  const [mode, setMode] = useState("game");
+  const pal = PALETTES[mode];
   const [path, setPath] = useState([]);
   const [sim, setSim] = useState(initialState);
   const [running, setRunning] = useState(false);
@@ -741,6 +758,23 @@ export default function Sap1Visualizer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(MODE_KEY);
+      if (saved === "game" || saved === "textbook") setMode(saved);
+    } catch {
+      // storage blocked: keep the default
+    }
+  }, []);
+  const chooseMode = (m) => {
+    setMode(m);
+    try {
+      window.localStorage.setItem(MODE_KEY, m);
+    } catch {
+      // storage blocked: the choice lasts until the page is left
+    }
+  };
+
   // Free-running clock.
   useEffect(() => {
     if (!running) return;
@@ -782,16 +816,10 @@ export default function Sap1Visualizer() {
   const btn = `${BTN} ${BTN_DISABLED}`;
   const clockStopped = sim.halted || sim.prog;
 
-  const setMode = (on) => {
+  const setProgSwitch = (on) => {
     if (on) setRunning(false);
     setSim((s) => setProg(s, on));
   };
-
-  // describe() says "Reset" for HLT; the button is called Clear here.
-  const status =
-    sim.halted && !sim.prog
-      ? "HLT is in the instruction register, so the clock has stopped. Press Clear to run again."
-      : describe(sim);
 
   return (
     <PaletteContext.Provider value={pal}>
@@ -803,7 +831,27 @@ export default function Sap1Visualizer() {
           <a href="/" className="text-sm text-[color:var(--sap-muted)] hover:underline">
             ← home
           </a>
-          <h1 className="mt-2 text-4xl font-bold">sap-1</h1>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+            <h1 className="text-4xl font-bold">sap-1</h1>
+            <div role="group" aria-label="View mode" className="flex">
+              {[
+                ["game", "Game"],
+                ["textbook", "Textbook"],
+              ].map(([m, label], i) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={mode === m}
+                  onClick={() => chooseMode(m)}
+                  className={`border border-[color:var(--sap-ink)] px-3 py-1 text-sm ${i ? "-ml-px" : ""} ${
+                    mode === m ? "bg-[color:var(--sap-ink)] text-[color:var(--sap-bg)]" : "hover:bg-[color:var(--sap-hover)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className="mt-2 max-w-2xl text-[color:var(--sap-soft)]">
             The Simple-As-Possible computer from Malvino &amp; Brown&apos;s <i>Digital Computer Electronics</i>, chapter 10.
             Click a part marked + to look inside it, and step the clock to watch the example program run. Switch to
@@ -840,7 +888,7 @@ export default function Sap1Visualizer() {
                       key={label}
                       type="button"
                       aria-pressed={sim.prog === on}
-                      onClick={() => setMode(on)}
+                      onClick={() => setProgSwitch(on)}
                       className={`border border-[color:var(--sap-ink)] px-2.5 py-1 font-mono text-[13px] ${
                         i ? "-ml-px" : ""
                       } ${
@@ -897,7 +945,7 @@ export default function Sap1Visualizer() {
                       key={t}
                       className={`px-1.5 py-0.5 ${
                         !sim.halted && sim.t === t
-                          ? "bg-[color:var(--sap-accent)] text-[color:var(--sap-on-accent)]"
+                          ? "bg-[color:var(--sap-type-status)] text-[color:var(--sap-on-accent)]"
                           : t <= 3
                             ? "text-[color:var(--sap-muted)]"
                             : "text-[color:var(--sap-faint)]"
@@ -933,10 +981,7 @@ export default function Sap1Visualizer() {
                   aria-label={`${node.title} diagram`}
                 >
                   <defs>
-                    {[
-                      ["off", pal.ink],
-                      ["on", pal.accent],
-                    ].map(([id, color]) => (
+                    {[["off", pal.ink], ...Object.entries(pal.type)].map(([id, color]) => (
                       <marker
                         key={id}
                         id={`sap1-arrow-${id}`}
@@ -955,6 +1000,7 @@ export default function Sap1Visualizer() {
                   <g ref={sceneRef}>
                     <Diagram
                       node={node}
+                      path={path}
                       sim={sim}
                       d={d}
                       focusId={focusId}
@@ -974,10 +1020,13 @@ export default function Sap1Visualizer() {
                       ? "Halted"
                       : `T${sim.t} · ${sim.t <= 3 ? "fetch" : `execute ${d.op}`}`}
                 </span>{" "}
-                — {status}
+                — {describe(sim)}
               </p>
               <p className="mt-2 text-xs text-[color:var(--sap-muted)]">
-                Red marks what is active in this T state. Esc or the breadcrumbs go back up a level.
+                {mode === "game"
+                  ? "Lit parts are active in this T state: amber carries an address, green data, red control signals and the output, warm white the clock and T states."
+                  : "Red marks what is active in this T state."}{" "}
+                Esc or the breadcrumbs go back up a level.
               </p>
             </div>
 
