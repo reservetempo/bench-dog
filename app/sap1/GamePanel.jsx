@@ -9,8 +9,20 @@
 // Each section stands for one block of the overview diagram (sap1Parts.js ROOT, same ids), so
 // hovering or clicking it drives the info panel and the drill-down exactly like the block does.
 
+import { useEffect, useRef, useState } from "react";
 import { CANVAS, ROOT, decodeWord } from "./sap1Parts";
-import { CON_ORDER, bin, hex } from "./sap1Sim";
+import {
+  CON_ORDER,
+  bin,
+  clear,
+  hex,
+  loadExample,
+  setProg,
+  step,
+  toggleAddrBit,
+  toggleDataBit,
+  write,
+} from "./sap1Sim";
 import { GAME as P } from "./theme";
 import { signalType } from "./signalTypes";
 import { SvgText } from "./sigText";
@@ -505,11 +517,402 @@ function ControlWord({ ctx, d }) {
   );
 }
 
-// The bottom strip: an empty silkscreened area for the switches.
-function Controls({ sim, d, setSim, running, setRunning }) {
+// --- controls -------------------------------------------------------------------------------
+//
+// The bottom strip is the book's switch panel (S1–S7), laid out like an Altair: a row of chrome
+// bat-handle toggles with lamps above them, plus lit push buttons. Up means 1 / the upper label.
+
+// The CLOCK switch. MED is the visualizer's own free-running clock (its `running` state, STEP_MS);
+// SLOW and FAST run a clock of the panel's own instead (see Controls), so only one ever runs.
+const RATES = [
+  { label: "SLOW", ms: 1200 },
+  { label: "MED", ms: null },
+  { label: "FAST", ms: 150 },
+];
+const MED = 1;
+
+const CB = CONTROLS_BOX;
+const HEAD_Y = CB.y + 34; // switch numbers and group names
+const SW_LAMP_Y = CB.y + 48; // lamps above the switches
+const UP_Y = CB.y + 62; // what a lever means when up
+const PIVOT_Y = CB.y + 86; // lever pivots and button caps
+const DOWN_Y = CB.y + 116; // what a lever means when down
+const SW_READ_Y = CB.y + 127; // readouts under the switch rows
+const HIT_TOP = HEAD_Y + 6;
+const HIT_BOTTOM = CB.y + CB.h - 6;
+
+const ADDR_XS = lampXs(4, 151, 26); // A3 … A0
+const DATA_XS = lampXs(8, 318, 26, 8); // D7 … D0
+const X = { prog: 68, write: 452, clear: 518, step: 568, auto: 616, rate: 664, load: 747 };
+const DIVIDERS = [94, 488, 708];
+
+const isKey = (e) => e.key === "Enter" || e.key === " ";
+const NUT = Array.from({ length: 6 }, (_, i) => {
+  const a = Math.PI / 6 + (i * Math.PI) / 3;
+  return `${(7.4 * Math.cos(a)).toFixed(2)},${(7.4 * Math.sin(a)).toFixed(2)}`;
+}).join(" ");
+
+const CONTROL_CSS = `
+.gp-ctl { cursor: pointer; outline: none; }
+.gp-ctl[aria-disabled="true"] { cursor: default; }
+.gp-ctl .gp-focus { opacity: 0; }
+.gp-ctl:focus-visible .gp-focus { opacity: 1; }
+.gp-lever { transform-origin: 0 0; transition: transform 140ms cubic-bezier(0.3, 0.7, 0.4, 1); }
+.gp-fade { transition: opacity 140ms; }
+@media (prefers-reduced-motion: reduce) { .gp-lever, .gp-fade { transition: none; } }
+`;
+
+function ControlDefs() {
+  return (
+    <defs>
+      <linearGradient id="gp-chrome" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#4a5058" />
+        <stop offset="0.3" stopColor="#f3f5f7" />
+        <stop offset="0.52" stopColor="#c3c8ce" />
+        <stop offset="0.8" stopColor="#7d838b" />
+        <stop offset="1" stopColor="#363b42" />
+      </linearGradient>
+      <radialGradient id="gp-chrome-tip" cx="0.36" cy="0.3" r="0.72">
+        <stop offset="0" stopColor="#ffffff" />
+        <stop offset="0.35" stopColor="#d4d8dd" />
+        <stop offset="1" stopColor="#474c54" />
+      </radialGradient>
+      <linearGradient id="gp-nut" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#b8bdc4" />
+        <stop offset="0.5" stopColor="#7a8089" />
+        <stop offset="1" stopColor="#3b4048" />
+      </linearGradient>
+      {["white", "red"].flatMap((c) => {
+        const { on, off } = P.led[c];
+        return [
+          <linearGradient key={`on-${c}`} id={`gp-cap-on-${c}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={mix(on, "#ffffff", 0.6)} />
+            <stop offset="0.5" stopColor={on} />
+            <stop offset="1" stopColor={mix(on, "#000000", 0.25)} />
+          </linearGradient>,
+          <linearGradient key={`off-${c}`} id={`gp-cap-off-${c}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={mix(off, "#ffffff", 0.16)} />
+            <stop offset="1" stopColor={mix(off, "#000000", 0.35)} />
+          </linearGradient>,
+        ];
+      })}
+    </defs>
+  );
+}
+
+// A chrome bat-handle toggle seen from the front: a hex nut and a lever pointing up (pos 1), down
+// (pos -1) or straight out at you (pos 0, the middle of a three-way switch). It flips by squashing
+// through the pivot, which reads as the lever swinging over.
+function Lever({ x, pos }) {
+  return (
+    <g transform={`translate(${x} ${PIVOT_Y})`} pointerEvents="none">
+      <circle cy={1.2} r={9} fill="#000" opacity={0.35} />
+      <polygon points={NUT} fill="url(#gp-nut)" stroke="#111419" strokeWidth={0.7} />
+      <circle r={4.3} fill="#15181d" />
+      <g className="gp-lever" style={{ transform: `scaleY(${pos === 0 ? 0.06 : pos})` }}>
+        <path d="M-1.7 0L-2.3 -11.5H2.3L1.7 0Z" fill="#000" opacity={0.3} transform="translate(1.6 0.8)" />
+        <path d="M-1.7 0L-2.3 -11.5H2.3L1.7 0Z" fill="url(#gp-chrome)" />
+        <ellipse cy={-14} rx={3.2} ry={4.1} fill="url(#gp-chrome-tip)" stroke="#2a2e34" strokeWidth={0.4} />
+      </g>
+      <circle className="gp-fade" r={3.5} fill="url(#gp-chrome-tip)" style={{ opacity: pos === 0 ? 1 : 0 }} />
+    </g>
+  );
+}
+
+// The focus ring and the transparent hit area of a control `w` wide.
+function HitArea({ x, w }) {
+  const y = HIT_TOP;
+  const h = HIT_BOTTOM - HIT_TOP;
+  return (
+    <>
+      <rect x={x - w / 2} y={y} width={w} height={h} fill="transparent" />
+      <rect
+        className="gp-focus"
+        x={x - w / 2 + 0.5}
+        y={y + 0.5}
+        width={w - 1}
+        height={h - 1}
+        rx={3}
+        fill="rgba(232,226,208,0.06)"
+        stroke={SILK}
+        strokeOpacity={0.7}
+        strokeDasharray="2 2"
+        pointerEvents="none"
+      />
+    </>
+  );
+}
+
+// A two-way toggle (role="switch"). Click, Enter or Space flips it.
+function Toggle({ x, w = 24, on, label, disabled, onFlip, children }) {
+  return (
+    <g
+      role="switch"
+      tabIndex={0}
+      aria-checked={on}
+      aria-label={label}
+      aria-disabled={disabled ? "true" : undefined}
+      className="gp-ctl"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onFlip();
+      }}
+      onKeyDown={(e) => {
+        if (!isKey(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!disabled && !e.repeat) onFlip();
+      }}
+    >
+      <HitArea x={x} w={w} />
+      <g opacity={disabled ? 0.4 : 1}>
+        <Lever x={x} pos={on ? 1 : -1} />
+        {children}
+      </g>
+    </g>
+  );
+}
+
+// Labels above and below a lever; the one for its current position is brighter.
+function LeverLabels({ x, up, down, isUp }) {
+  return (
+    <g pointerEvents="none">
+      <Silk x={x} y={UP_Y} size={7.5} spacing={1} weight={isUp ? 700 : 400} fill={isUp ? SILK : P.muted}>
+        {up}
+      </Silk>
+      <Silk x={x} y={DOWN_Y} size={7.5} spacing={1} weight={isUp ? 400 : 700} fill={isUp ? P.muted : SILK}>
+        {down}
+      </Silk>
+    </g>
+  );
+}
+
+// A momentary lit push button. It lights while held (pointer or Enter / Space) and acts on
+// release; disabled, it is dim and does nothing.
+function PushButton({ x, legend, above, below, color = "white", disabled, label, onPress }) {
+  const [down, setDown] = useState(false);
+  const downRef = useRef(false);
+  const press = (v) => {
+    downRef.current = v;
+    setDown(v);
+  };
+  const lit = down && !disabled;
+  const led = P.led[color];
+  const [w, h] = [40, 22];
+  const [x0, y0] = [x - w / 2, PIVOT_Y - h / 2];
+  return (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      aria-disabled={disabled ? "true" : undefined}
+      className="gp-ctl"
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        if (!disabled && e.button === 0) press(true);
+      }}
+      onPointerUp={() => press(false)}
+      onPointerLeave={() => press(false)}
+      onPointerCancel={() => press(false)}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onPress();
+      }}
+      onKeyDown={(e) => {
+        if (!isKey(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!disabled && !e.repeat) press(true);
+      }}
+      onKeyUp={(e) => {
+        if (!isKey(e)) return;
+        e.preventDefault();
+        if (!downRef.current) return;
+        press(false);
+        if (!disabled) onPress();
+      }}
+      onBlur={() => press(false)}
+    >
+      <HitArea x={x} w={w + 12} />
+      <g opacity={disabled ? 0.4 : 1} pointerEvents="none">
+        {above && (
+          <Silk x={x} y={UP_Y} size={7.5} spacing={1}>
+            {above}
+          </Silk>
+        )}
+        {below && (
+          <Silk x={x} y={DOWN_Y} size={7.5} spacing={1}>
+            {below}
+          </Silk>
+        )}
+        <rect x={x0 - 3.5} y={y0 - 3.5} width={w + 7} height={h + 7} rx={4} fill="#0a0c10" stroke="#000" strokeWidth={0.8} />
+        <path d={`M${x0 - 3} ${y0 + h + 3.6}H${x0 + w + 3}`} stroke="#fff" strokeOpacity={0.12} strokeWidth={0.8} />
+        {lit && <rect x={x0 - 2} y={y0 - 2} width={w + 4} height={h + 4} rx={4} fill={led.on} opacity={0.5} filter="url(#gp-glow)" />}
+        <g transform={lit ? "translate(0 0.8)" : undefined}>
+          <rect x={x0} y={y0} width={w} height={h} rx={2.5} fill={`url(#gp-cap-${lit ? "on" : "off"}-${color})`} />
+          <rect x={x0 + 1.5} y={y0 + 1} width={w - 3} height={h * 0.38} rx={2} fill="#fff" opacity={lit ? 0.32 : 0.07} />
+          <text
+            x={x}
+            y={PIVOT_Y + 3}
+            fontSize={8}
+            fontFamily={FONT}
+            fontWeight={700}
+            letterSpacing={1}
+            textAnchor="middle"
+            fill={lit ? "#2a1a08" : mix(led.on, P.ink, 0.55)}
+            opacity={lit ? 1 : 0.8}
+          >
+            {legend}
+          </text>
+        </g>
+      </g>
+    </g>
+  );
+}
+
+// The CLOCK rate switch: a three-way lever (FAST up, MED in the middle, SLOW down). Clicking its
+// upper or lower half pushes it up or down a notch; arrows, Home / End, or Enter / Space (which
+// cycles) work from the keyboard.
+function RateSwitch({ x, rate, onRate, lamp }) {
+  const set = (r) => onRate(Math.max(0, Math.min(RATES.length - 1, r)));
+  return (
+    <g
+      role="slider"
+      tabIndex={0}
+      aria-label="Clock rate"
+      aria-orientation="vertical"
+      aria-valuemin={0}
+      aria-valuemax={RATES.length - 1}
+      aria-valuenow={rate}
+      aria-valuetext={RATES[rate].label}
+      className="gp-ctl"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        set(e.clientY < r.top + r.height / 2 ? rate + 1 : rate - 1);
+      }}
+      onKeyDown={(e) => {
+        const next = {
+          ArrowUp: rate + 1,
+          ArrowRight: rate + 1,
+          ArrowDown: rate - 1,
+          ArrowLeft: rate - 1,
+          Home: 0,
+          End: RATES.length - 1,
+          Enter: (rate + 1) % RATES.length,
+          " ": (rate + 1) % RATES.length,
+        }[e.key];
+        if (next === undefined) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat || e.key.startsWith("Arrow")) set(next);
+      }}
+    >
+      <HitArea x={x} w={34} />
+      <Lamps cy={SW_LAMP_Y} r={4.5} lamps={[{ x, on: lamp, color: "white" }]} />
+      <LeverLabels x={x} up="FAST" down="SLOW" isUp={rate === 2} />
+      <Silk x={x + 11} y={PIVOT_Y + 2.5} size={6.5} spacing={0.5} anchor="start" weight={rate === MED ? 700 : 400} fill={rate === MED ? SILK : P.muted}>
+        MED
+      </Silk>
+      <Lever x={x} pos={rate - 1} />
+    </g>
+  );
+}
+
+// A silkscreened group name with an Altair-style bracket under it.
+function GroupHead({ x0, x1, children }) {
+  const y = HEAD_Y + 4;
+  return (
+    <g pointerEvents="none">
+      <Silk x={(x0 + x1) / 2} y={HEAD_Y} size={7.5} spacing={1.5} fill={P.soft}>
+        {children}
+      </Silk>
+      <path d={`M${x0} ${y + 3}V${y}H${x1}V${y + 3}`} fill="none" stroke={SILK} strokeOpacity={0.4} strokeWidth={0.8} />
+    </g>
+  );
+}
+
+// The bottom strip: the switch panel. sim / setSim: the simulator. running / setRunning: the
+// visualizer's free-running clock, which is AUTO at the MED rate.
+//
+// AUTO at SLOW or FAST runs a clock of the panel's own (`own`) and keeps `running` false, so the
+// two clocks never run together; the lever reads AUTO while either runs. The panel clock stops on
+// HLT, PROG, Clear (here or in the toolbar) and MANUAL. The toolbar's Run starts the visualizer's
+// clock, which takes over at MED. If the panel goes away (a part is opened, or Textbook mode)
+// while its clock runs, it hands over to the visualizer's clock so the machine keeps running.
+function Controls({ sim, setSim, running, setRunning }) {
   const b = CONTROLS_BOX;
+  const [rate, setRate] = useState(MED);
+  const [own, setOwn] = useState(false);
+  const auto = running || own;
+  const stopped = sim.prog || sim.halted;
+
+  useEffect(() => {
+    if (!own) return undefined;
+    const id = setInterval(() => setSim((s) => step(s)), RATES[rate].ms);
+    return () => clearInterval(id);
+  }, [own, rate, setSim]);
+
+  useEffect(() => {
+    if (stopped) setOwn(false);
+  }, [stopped]);
+
+  useEffect(() => {
+    if (running) {
+      setOwn(false);
+      setRate(MED);
+    }
+  }, [running]);
+
+  // A Clear from the toolbar puts the counters back to zero: stop the panel clock too.
+  const lastCycles = useRef(sim.cycles);
+  useEffect(() => {
+    if (sim.cycles < lastCycles.current) setOwn(false);
+    lastCycles.current = sim.cycles;
+  }, [sim.cycles]);
+
+  const ownRef = useRef(own);
+  useEffect(() => {
+    ownRef.current = own;
+  }, [own]);
+  useEffect(
+    () => () => {
+      if (ownRef.current) setRunning(true);
+    },
+    [setRunning]
+  );
+
+  const startClock = (r) => {
+    if (RATES[r].ms) {
+      setRunning(false);
+      setOwn(true);
+    } else {
+      setOwn(false);
+      setRunning(true);
+    }
+  };
+  const stopClock = () => {
+    setRunning(false);
+    setOwn(false);
+  };
+  const setAuto = (on) => {
+    if (!on) stopClock();
+    else if (!stopped) startClock(rate);
+  };
+  const chooseRate = (r) => {
+    setRate(r);
+    if (auto) startClock(r);
+  };
+
+  const addrBits = bitLamps(sim.addrSw, ADDR_XS, "amber");
+  const dataBits = bitLamps(sim.dataSw, DATA_XS, "green");
+
   return (
     <g>
+      <style>{CONTROL_CSS}</style>
+      <ControlDefs />
       <rect
         x={b.x + 0.5}
         y={b.y + 0.5}
@@ -524,6 +927,146 @@ function Controls({ sim, d, setSim, running, setRunning }) {
       <Silk x={b.x + 14} y={b.y + 19} anchor="start" size={11} spacing={3} weight={700}>
         CONTROLS
       </Silk>
+      {DIVIDERS.map((x) => (
+        <path key={x} d={`M${x + 0.5} ${HEAD_Y - 8}V${HIT_BOTTOM}`} stroke={SILK} strokeOpacity={0.2} />
+      ))}
+
+      {/* switch numbers, as on the schematic in the book */}
+      <g pointerEvents="none">
+        {[
+          ["S2", X.prog],
+          ["S4", X.write],
+          ["S5", X.clear],
+          ["S6", X.step],
+          ["S7", X.auto],
+          ["CLOCK", X.rate],
+        ].map(([t, x]) => (
+          <Silk key={t} x={x} y={HEAD_Y} size={7.5} spacing={1.5} fill={P.soft}>
+            {t}
+          </Silk>
+        ))}
+      </g>
+      <GroupHead x0={ADDR_XS[0] - 10} x1={ADDR_XS[3] + 10}>
+        S1 · ADDRESS
+      </GroupHead>
+      <GroupHead x0={DATA_XS[0] - 10} x1={DATA_XS[7] + 10}>
+        S3 · DATA
+      </GroupHead>
+
+      {/* S2: RUN / PROG */}
+      <Toggle
+        x={X.prog}
+        w={34}
+        on={sim.prog}
+        label={`RUN/PROG switch S2, ${sim.prog ? "PROG" : "RUN"}`}
+        onFlip={() => {
+          if (!sim.prog) stopClock();
+          setSim((s) => setProg(s, !s.prog));
+        }}
+      >
+        <Lamps cy={SW_LAMP_Y} r={4.5} lamps={[{ x: X.prog, on: sim.prog, color: "white" }]} />
+        <LeverLabels x={X.prog} up="PROG" down="RUN" isUp={sim.prog} />
+      </Toggle>
+
+      {/* S1 and S3: address and data switches, MSB on the left */}
+      <Lamps cy={SW_LAMP_Y} r={4.5} lamps={[...addrBits, ...dataBits]} />
+      {ADDR_XS.map((x, k) => {
+        const bit = 3 - k;
+        const on = addrBits[k].on;
+        return (
+          <Toggle
+            key={`a${bit}`}
+            x={x}
+            on={on}
+            label={`Address switch A${bit}, ${on ? "on" : "off"}`}
+            onFlip={() => setSim((s) => toggleAddrBit(s, bit))}
+          >
+            <Silk x={x} y={UP_Y} size={7.5} spacing={0.5} fill={on ? SILK : P.muted}>
+              {`A${bit}`}
+            </Silk>
+          </Toggle>
+        );
+      })}
+      {DATA_XS.map((x, k) => {
+        const bit = 7 - k;
+        const on = dataBits[k].on;
+        return (
+          <Toggle
+            key={`d${bit}`}
+            x={x}
+            on={on}
+            label={`Data switch D${bit}, ${on ? "on" : "off"}`}
+            onFlip={() => setSim((s) => toggleDataBit(s, bit))}
+          >
+            <Silk x={x} y={UP_Y} size={7.5} spacing={0.5} fill={on ? SILK : P.muted}>
+              {`D${bit}`}
+            </Silk>
+          </Toggle>
+        );
+      })}
+      <g pointerEvents="none">
+        <Readout x={(ADDR_XS[0] + ADDR_XS[3]) / 2} y={SW_READ_Y} size={10}>
+          {nibble(sim.addrSw)}
+        </Readout>
+        <Readout x={(DATA_XS[0] + DATA_XS[7]) / 2} y={SW_READ_Y} size={10}>
+          {`${byte(sim.dataSw)} · ${decodeWord(sim.dataSw) ?? "NOP"}`}
+        </Readout>
+      </g>
+
+      {/* S4: WRITE, only in PROG */}
+      <PushButton
+        x={X.write}
+        legend="WRITE"
+        disabled={!sim.prog}
+        label={`WRITE (S4): store the data switches at address ${hex(sim.addrSw, 1)}H${sim.prog ? "" : ", PROG only"}`}
+        onPress={() => setSim((s) => write(s))}
+      />
+
+      {/* S5 CLEAR / START, S6 SINGLE STEP */}
+      <PushButton
+        x={X.clear}
+        legend="CLEAR"
+        below="START"
+        color="red"
+        label="CLEAR/START (S5)"
+        onPress={() => {
+          stopClock();
+          setSim((s) => clear(s));
+        }}
+      />
+      <PushButton
+        x={X.step}
+        legend="STEP"
+        above="SINGLE"
+        disabled={stopped || auto}
+        label="SINGLE STEP (S6): one clock pulse"
+        onPress={() => setSim((s) => step(s))}
+      />
+
+      {/* S7: MANUAL / AUTO, and the clock rate */}
+      <Toggle
+        x={X.auto}
+        w={42}
+        on={auto}
+        disabled={stopped && !auto}
+        label={`MANUAL/AUTO switch S7, ${auto ? "AUTO" : "MANUAL"}`}
+        onFlip={() => setAuto(!auto)}
+      >
+        <Lamps cy={SW_LAMP_Y} r={4.5} lamps={[{ x: X.auto, on: auto, color: "white" }]} />
+        <LeverLabels x={X.auto} up="AUTO" down="MANUAL" isUp={auto} />
+      </Toggle>
+      <RateSwitch x={X.rate} rate={rate} onRate={chooseRate} lamp={auto && sim.cycles % 2 === 1} />
+
+      <PushButton
+        x={X.load}
+        legend="LOAD"
+        below="EXAMPLE"
+        label="Load example program 10-1 and clear"
+        onPress={() => {
+          stopClock();
+          setSim((s) => clear(loadExample(s)));
+        }}
+      />
     </g>
   );
 }
@@ -570,7 +1113,7 @@ export default function GamePanel({ sim, d, setSim, running, setRunning, onOpen,
       <Controller ctx={ctx} sim={sim} d={d} />
       <ControlWord ctx={ctx} d={d} />
 
-      <Controls sim={sim} d={d} setSim={setSim} running={running} setRunning={setRunning} />
+      <Controls sim={sim} setSim={setSim} running={running} setRunning={setRunning} />
     </g>
   );
 }
