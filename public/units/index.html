@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Unit Tree</title>
+  <link rel="stylesheet" href="/units/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <header class="brand">
+        <h1>Unit Tree</h1>
+        <p>Break any physics unit down until you reach the seven SI base units.</p>
+      </header>
+      <input id="search" type="search" placeholder="Search: joule, N, pressure…" aria-label="Search quantities" autocomplete="off">
+      <nav id="library" aria-label="Quantities"></nav>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <div class="legend" aria-label="Legend">
+          <span class="lg k-base">SI base unit</span>
+          <span class="lg k-named">Named SI unit</span>
+          <span class="lg k-compound">Combination (no special name)</span>
+        </div>
+        <div class="tools">
+          <button type="button" id="expandAll">Expand all</button>
+          <button type="button" id="collapseAll">Collapse</button>
+          <span class="zoom" role="group" aria-label="Zoom">
+            <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+            <button type="button" id="zoomReset" aria-label="Reset zoom">100%</button>
+            <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+          </span>
+        </div>
+      </div>
+      <p class="hint">Click a card to see what it's made of. On the lines, <b>×</b> means multiply and <b>÷</b> means divide.</p>
+      <div id="problems" class="problems" hidden></div>
+      <div id="canvas" class="canvas">
+        <ul id="tree" class="tree"></ul>
+      </div>
+    </main>
+  </div>
+
+  <script src="/units/data/units.js"></script>
+  <script src="/units/app.js"></script>
+</body>
+</html>

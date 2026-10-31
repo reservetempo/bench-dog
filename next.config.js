@@ -11,6 +11,10 @@ const nextConfig = {
       },
     ],
   },
+  // Unit Tree is a plain HTML/JS app in public/units; serve it at /units
+  async rewrites() {
+    return [{ source: '/units', destination: '/units/index.html' }];
+  },
 };
 
 module.exports = nextConfig;

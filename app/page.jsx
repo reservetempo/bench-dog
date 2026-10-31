@@ -78,23 +78,28 @@ export default function Home() {
           
           {/* Archive Link
               - ml-auto: Pushes the link group to the right for small screens (justify-between layout).
-              - mr-6: Adds space between 'archive' and 'contact' on small screens.
+              - mr-4: Adds space between the nav links on small screens.
               - md:ml-0 md:mr-0: Resets all margins to 0 for medium screens and up.
           */}
           <a 
             href="/archive" 
-            className={`${elementClasses} ml-auto mr-6 md:ml-0 md:mr-0`}
+            className={`${elementClasses} ml-auto mr-4 md:ml-0 md:mr-0`}
           >archive</a>
           
           <a
             href="/sequencer"
-            className={`${elementClasses} mr-6 md:ml-0 md:mr-0`}
+            className={`${elementClasses} mr-4 md:ml-0 md:mr-0`}
           >sequencer</a>
 
           <a
             href="/blog"
-            className={`${elementClasses} mr-6 md:ml-0 md:mr-0`}
+            className={`${elementClasses} mr-4 md:ml-0 md:mr-0`}
           >blog</a>
+
+          <a
+            href="/units"
+            className={`${elementClasses} mr-4 md:ml-0 md:mr-0`}
+          >units</a>
 
           <a
             href="/sap1"
