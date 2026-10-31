@@ -33,7 +33,13 @@ const usePalette = () => useContext(PaletteContext);
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const FULL = [0, 0, CANVAS.w, CANVAS.h];
-const STEP_MS = 550;
+// The free-running clock's period for each rate setting (the toolbar's and the panel's CLOCK switch).
+export const STEP_MS = { slow: 1200, med: 550, fast: 150 };
+const RATE_LABELS = [
+  ["slow", "Slow"],
+  ["med", "Med"],
+  ["fast", "Fast"],
+];
 const MODE_KEY = "sap1-mode"; // localStorage: "game" | "textbook"
 
 // --- geometry & animation helpers -----------------------------------------------------------
@@ -609,6 +615,8 @@ export default function Sap1Visualizer() {
   const [path, setPath] = useState([]);
   const [sim, setSim] = useState(initialState);
   const [running, setRunning] = useState(false);
+  const [rate, setRate] = useState("med"); // "slow" | "med" | "fast"
+  const stepMs = STEP_MS[rate];
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
 
@@ -717,12 +725,13 @@ export default function Sap1Visualizer() {
     }
   };
 
-  // Free-running clock.
+  // The one free-running clock: the toolbar's Run / Pause and the panel's AUTO lever both drive
+  // `running`, and both rate controls drive `rate`.
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => setSim((s) => step(s)), STEP_MS);
+    const id = setInterval(() => setSim((s) => step(s)), stepMs);
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, stepMs]);
   useEffect(() => {
     if (sim.halted || sim.prog) setRunning(false);
   }, [sim.halted, sim.prog]);
@@ -861,7 +870,7 @@ export default function Sap1Visualizer() {
                   <button
                     type="button"
                     className={btn}
-                    disabled={clockStopped}
+                    disabled={clockStopped || running}
                     onClick={() => setSim((s) => step(s))}
                   >
                     Step
@@ -874,6 +883,25 @@ export default function Sap1Visualizer() {
                   >
                     {running ? "Pause" : "Run"}
                   </button>
+                  <div role="group" aria-label="Clock rate" className="flex">
+                    {RATE_LABELS.map(([r, label], i) => (
+                      <button
+                        key={r}
+                        type="button"
+                        aria-pressed={rate === r}
+                        onClick={() => setRate(r)}
+                        className={`border border-[color:var(--sap-ink)] px-2 py-1 font-mono text-[12px] ${
+                          i ? "-ml-px" : ""
+                        } ${
+                          rate === r
+                            ? "bg-[color:var(--sap-ink)] text-[color:var(--sap-bg)]"
+                            : "hover:bg-[color:var(--sap-hover)]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <button
                     type="button"
                     className={btn}
@@ -951,6 +979,9 @@ export default function Sap1Visualizer() {
                         setSim={setSim}
                         running={running}
                         setRunning={setRunning}
+                        rate={rate}
+                        setRate={setRate}
+                        stepMs={stepMs}
                         onOpen={openPart}
                         focusId={focusId}
                         onEnter={onEnter}

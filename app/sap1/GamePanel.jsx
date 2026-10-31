@@ -9,7 +9,7 @@
 // Each section stands for one block of the overview diagram (sap1Parts.js ROOT, same ids), so
 // hovering or clicking it drives the info panel and the drill-down exactly like the block does.
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { CANVAS, ROOT, decodeWord } from "./sap1Parts";
 import {
   CON_ORDER,
@@ -522,12 +522,12 @@ function ControlWord({ ctx, d }) {
 // The bottom strip is the book's switch panel (S1–S7), laid out like an Altair: a row of chrome
 // bat-handle toggles with lamps above them, plus lit push buttons. Up means 1 / the upper label.
 
-// The CLOCK switch. MED is the visualizer's own free-running clock (its `running` state, STEP_MS);
-// SLOW and FAST run a clock of the panel's own instead (see Controls), so only one ever runs.
+// The CLOCK switch's notches, bottom to top. Each sets the visualizer's `rate` (its one clock's
+// period, STEP_MS[rate]).
 const RATES = [
-  { label: "SLOW", ms: 1200 },
-  { label: "MED", ms: null },
-  { label: "FAST", ms: 150 },
+  { key: "slow", label: "SLOW" },
+  { key: "med", label: "MED" },
+  { key: "fast", label: "FAST" },
 ];
 const MED = 1;
 
@@ -835,76 +835,21 @@ function GroupHead({ x0, x1, children }) {
 }
 
 // The bottom strip: the switch panel. sim / setSim: the simulator. running / setRunning: the
-// visualizer's free-running clock, which is AUTO at the MED rate.
-//
-// AUTO at SLOW or FAST runs a clock of the panel's own (`own`) and keeps `running` false, so the
-// two clocks never run together; the lever reads AUTO while either runs. The panel clock stops on
-// HLT, PROG, Clear (here or in the toolbar) and MANUAL. The toolbar's Run starts the visualizer's
-// clock, which takes over at MED. If the panel goes away (a part is opened, or Textbook mode)
-// while its clock runs, it hands over to the visualizer's clock so the machine keeps running.
-function Controls({ sim, setSim, running, setRunning }) {
+// visualizer's one free-running clock, which the MANUAL / AUTO lever drives (it reads AUTO exactly
+// while the clock runs, whoever started it). rate / setRate: that clock's rate ("slow" | "med" |
+// "fast"), which the CLOCK switch drives. The visualizer stops the clock on HLT and PROG.
+function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
   const b = CONTROLS_BOX;
-  const [rate, setRate] = useState(MED);
-  const [own, setOwn] = useState(false);
-  const auto = running || own;
+  const auto = running;
   const stopped = sim.prog || sim.halted;
+  const rateIndex = Math.max(0, RATES.findIndex((r) => r.key === rate));
 
-  useEffect(() => {
-    if (!own) return undefined;
-    const id = setInterval(() => setSim((s) => step(s)), RATES[rate].ms);
-    return () => clearInterval(id);
-  }, [own, rate, setSim]);
-
-  useEffect(() => {
-    if (stopped) setOwn(false);
-  }, [stopped]);
-
-  useEffect(() => {
-    if (running) {
-      setOwn(false);
-      setRate(MED);
-    }
-  }, [running]);
-
-  // A Clear from the toolbar puts the counters back to zero: stop the panel clock too.
-  const lastCycles = useRef(sim.cycles);
-  useEffect(() => {
-    if (sim.cycles < lastCycles.current) setOwn(false);
-    lastCycles.current = sim.cycles;
-  }, [sim.cycles]);
-
-  const ownRef = useRef(own);
-  useEffect(() => {
-    ownRef.current = own;
-  }, [own]);
-  useEffect(
-    () => () => {
-      if (ownRef.current) setRunning(true);
-    },
-    [setRunning]
-  );
-
-  const startClock = (r) => {
-    if (RATES[r].ms) {
-      setRunning(false);
-      setOwn(true);
-    } else {
-      setOwn(false);
-      setRunning(true);
-    }
-  };
-  const stopClock = () => {
-    setRunning(false);
-    setOwn(false);
-  };
+  const stopClock = () => setRunning(false);
   const setAuto = (on) => {
     if (!on) stopClock();
-    else if (!stopped) startClock(rate);
+    else if (!stopped) setRunning(true);
   };
-  const chooseRate = (r) => {
-    setRate(r);
-    if (auto) startClock(r);
-  };
+  const chooseRate = (i) => setRate(RATES[i].key);
 
   const addrBits = bitLamps(sim.addrSw, ADDR_XS, "amber");
   const dataBits = bitLamps(sim.dataSw, DATA_XS, "green");
@@ -1055,7 +1000,7 @@ function Controls({ sim, setSim, running, setRunning }) {
         <Lamps cy={SW_LAMP_Y} r={4.5} lamps={[{ x: X.auto, on: auto, color: "white" }]} />
         <LeverLabels x={X.auto} up="AUTO" down="MANUAL" isUp={auto} />
       </Toggle>
-      <RateSwitch x={X.rate} rate={rate} onRate={chooseRate} lamp={auto && sim.cycles % 2 === 1} />
+      <RateSwitch x={X.rate} rate={rateIndex} onRate={chooseRate} lamp={auto && sim.cycles % 2 === 1} />
 
       <PushButton
         x={X.load}
@@ -1074,10 +1019,24 @@ function Controls({ sim, setSim, running, setRunning }) {
 // --- panel ----------------------------------------------------------------------------------
 
 // sim / setSim: the simulator state and its setter. d: derive(sim). running / setRunning: the
-// free-running clock. onOpen(id): open a part (zooms in from its section). focusId: the hovered or
+// free-running clock. rate / setRate: its rate ("slow" | "med" | "fast"); stepMs: its period in
+// ms (STEP_MS[rate]). onOpen(id): open a part (zooms in from its section). focusId: the hovered or
 // selected part; onEnter(id) / onLeave(id) / onActivate(block, drill): the same callbacks the
 // overview blocks use.
-export default function GamePanel({ sim, d, setSim, running, setRunning, onOpen, focusId, onEnter, onLeave, onActivate }) {
+export default function GamePanel({
+  sim,
+  d,
+  setSim,
+  running,
+  setRunning,
+  rate,
+  setRate,
+  onOpen,
+  focusId,
+  onEnter,
+  onLeave,
+  onActivate,
+}) {
   const ctx = { d, focusId, onEnter, onLeave, onActivate, onOpen };
   const word = sim.ram[d.ramAddr];
   return (
@@ -1113,7 +1072,7 @@ export default function GamePanel({ sim, d, setSim, running, setRunning, onOpen,
       <Controller ctx={ctx} sim={sim} d={d} />
       <ControlWord ctx={ctx} d={d} />
 
-      <Controls sim={sim} setSim={setSim} running={running} setRunning={setRunning} />
+      <Controls sim={sim} setSim={setSim} running={running} setRunning={setRunning} rate={rate} setRate={setRate} />
     </g>
   );
 }
