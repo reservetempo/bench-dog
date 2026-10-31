@@ -67,14 +67,52 @@ export const bin = (v, n = 8) => {
 };
 export const hex = (v, n = 2) => (v >>> 0).toString(16).toUpperCase().padStart(n, '0');
 
+// prog: the RUN/PROG switch S2 (false = RUN, true = PROG). addrSw: address switches S1 (4 bits).
+// dataSw: data switches S3 (8 bits). cycles: T states elapsed. instructions: instructions completed.
 export function initialState() {
-  return { pc: 0, mar: 0, ir: 0, a: 0, b: 0, out: 0, ram: [...PROGRAM], t: 1, halted: false };
+  return {
+    pc: 0, mar: 0, ir: 0, a: 0, b: 0, out: 0, ram: [...PROGRAM], t: 1, halted: false,
+    prog: false, addrSw: 0, dataSw: 0, cycles: 0, instructions: 0,
+  };
 }
+
+// The front-panel switches (S1–S5 on the SAP-1 schematic in the book). Each helper returns a new
+// state and never mutates the one passed in.
+
+// S2, RUN/PROG: drives the select input of the 74LS157 (C5) that picks the RAM address.
+export const setProg = (s, on) => ({ ...s, prog: !!on });
+
+// The RAM address: the address switches S1 in PROG, the MAR in RUN (what C5 passes through).
+export const ramAddr = (s) => (s.prog ? s.addrSw & 0xf : s.mar);
+
+// S1, address switches. Bit i: 0 = LSB (A0) … 3 = MSB (A3).
+export const toggleAddrBit = (s, i) => ({ ...s, addrSw: (s.addrSw ^ (1 << i)) & 0xf });
+
+// S3, data switches. Bit i: 0 = LSB (D0) … 7 = MSB (D7).
+export const toggleDataBit = (s, i) => ({ ...s, dataSw: (s.dataSw ^ (1 << i)) & 0xff });
+
+// S4, WRITE: pressing it takes WE̅ low, storing the data switches at the switch address.
+// Only has an effect in PROG.
+export function write(s) {
+  if (!s.prog) return s;
+  const ram = [...s.ram];
+  ram[s.addrSw & 0xf] = s.dataSw & 0xff;
+  return { ...s, ram };
+}
+
+// S5, CLEAR/START: CLR resets the instruction register, CLR̅ resets the program counter and the
+// ring counter (back to T1) and restarts the clock. RAM, A, B, OUT, MAR and the switches keep
+// their contents. The counters start again from zero.
+export const clear = (s) => ({ ...s, pc: 0, ir: 0, t: 1, halted: false, cycles: 0, instructions: 0 });
+
+// Put Example 10-1 back into the RAM.
+export const loadExample = (s) => ({ ...s, ram: [...PROGRAM] });
 
 export const opName = (ir) => OPS[ir >> 4] ?? 'NOP';
 
 export function signals(s) {
-  if (s.halted) return new Set();
+  // In PROG the clock isn't running, so the controller sends nothing.
+  if (s.prog || s.halted) return new Set();
   if (s.t <= 3) return new Set(FETCH[s.t - 1]);
   return new Set(EXEC[opName(s.ir)]?.[s.t - 4] ?? []);
 }
@@ -94,26 +132,29 @@ export function derive(s) {
   const su = sig.has('Su');
   const bIn = su ? ~s.b & 0xff : s.b; // XOR gates: B or its 1's complement
   const alu = (s.a + bIn + (su ? 1 : 0)) & 0xff;
+  const addr = ramAddr(s);
   let bus = null;
   let busBits = 8;
   if (sig.has('Ep')) { bus = s.pc; busBits = 4; }
-  else if (sig.has('CE')) bus = s.ram[s.mar];
+  else if (sig.has('CE')) bus = s.ram[addr];
   else if (sig.has('Ei')) { bus = s.ir & 0xf; busBits = 4; }
   else if (sig.has('Ea')) bus = s.a;
   else if (sig.has('Eu')) bus = alu;
-  return { sig, con: conWord(sig), su, bIn, alu, bus, busBits, op: opName(s.ir) };
+  return { sig, con: conWord(sig), su, bIn, alu, bus, busBits, op: opName(s.ir), ramAddr: addr };
 }
 
 export function describe(s) {
+  if (s.prog) return `PROG: the address switches (S1) select RAM word ${hex(s.addrSw & 0xf, 1)}H. Set the data switches (S3) and press WRITE (S4) to store them there.`;
   if (s.halted) return 'HLT is in the instruction register, so the clock has stopped. Reset to run again.';
   if (s.t <= 3) return FETCH_TEXT[s.t - 1];
   return EXEC_TEXT[opName(s.ir)]?.[s.t - 4] ?? 'No operation.';
 }
 
+// One clock pulse. Does nothing in PROG (the clock isn't running) or after HLT.
 export function step(s) {
-  if (s.halted) return s;
+  if (s.prog || s.halted) return s;
   const { sig, bus } = derive(s);
-  const n = { ...s };
+  const n = { ...s, cycles: s.cycles + 1 };
   if (sig.has('Lm')) n.mar = bus & 0xf;
   if (sig.has('Li')) n.ir = bus;
   if (sig.has('La')) n.a = bus;
@@ -121,7 +162,8 @@ export function step(s) {
   if (sig.has('Lo')) n.out = bus;
   if (sig.has('Cp')) n.pc = (s.pc + 1) & 0xf;
   // HLT: once the op code 1111 reaches the instruction register, HLT̄ goes low and stops the clock.
-  if (s.t === 3 && n.ir >> 4 === 0xf) return { ...n, t: 4, halted: true };
-  n.t = s.t === 6 ? 1 : s.t + 1;
+  if (s.t === 3 && n.ir >> 4 === 0xf) return { ...n, t: 4, halted: true, instructions: s.instructions + 1 };
+  if (s.t === 6) { n.t = 1; n.instructions = s.instructions + 1; }
+  else n.t = s.t + 1;
   return n;
 }

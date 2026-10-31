@@ -10,7 +10,7 @@
 // Wire:   { pts: [[x, y], ...], bits?, bitsAt?: [x, y], on?: signal, arrow?: false, label?, labelAt?, anchor?, dots? }
 // Pin:    { sig, at: [x, y], dir: 'left' | 'right' | 'up' | 'down', len? }   short control-signal stub
 
-import { bin, hex } from './sap1Sim';
+import { bin, hex, ramAddr } from './sap1Sim';
 
 export const CANVAS = { w: 820, h: 600 };
 
@@ -152,12 +152,13 @@ const mar = {
         value: (s) => bin(s.mar, 4), act: ['Lm'],
         about: `The memory address register. Loads the lower four bits of the W bus when {Lm} is low. ${P.ls173}` },
       { id: 's1', kind: 'switch', x: 200, y: 330, w: 200, h: 90, tag: 'S1', title: 'Address switches', sub: '4-bit DIP switch',
+        value: (s) => bin(s.addrSw, 4),
         about: 'Sets the RAM address by hand while you load a program.' },
       { id: 'c5', x: 500, y: 110, w: 180, h: 310, tag: 'C5', title: '74LS157', sub: '2-to-1 multiplexer',
-        value: () => 'passing the MAR', act: ['CE'],
+        value: (s) => (s.prog ? 'passing the switches' : 'passing the MAR'), act: ['CE'],
         about: `Picks the address switches (PROG) or the MAR (RUN) as the RAM address. ${P.ls157}` },
       { id: 's2', kind: 'switch', x: 500, y: 480, w: 180, h: 80, tag: 'S2', title: 'RUN / PROG', sub: 'switch',
-        value: () => 'set to RUN',
+        value: (s) => (s.prog ? 'set to PROG' : 'set to RUN'),
         about: 'In PROG the switches address the RAM and {CE} is held low so you can write. In RUN the MAR addresses the RAM.' },
     ],
     wires: [
@@ -188,6 +189,7 @@ const ram = {
       { id: 'c6', x: 460, y: 190, w: 200, h: 130, tag: 'C6', title: '74189', sub: '16 × 4 static RAM', act: ['CE'],
         about: `Stores the other four bits of each word. ${P.t189}` },
       { id: 's3', kind: 'switch', x: 200, y: 470, w: 460, h: 70, tag: 'S3', title: 'Data switches', sub: '8-bit DIP switch',
+        value: (s) => bin(s.dataSw),
         about: 'Sets the 8-bit word to store while programming.' },
       { id: 's4', kind: 'switch', x: 30, y: 470, w: 140, h: 70, tag: 'S4', title: 'Write', sub: 'push button',
         about: 'A momentary press takes {WE} low and writes the switch data into the addressed word.' },
@@ -422,7 +424,7 @@ export const ROOT = {
         about: 'Counts from 0000 to 1111 and holds the address of the next instruction. In T1 ({Ep}) it puts that address on the bus; in T2 ({Cp}) it counts up by one.' },
       { id: 'mar', x: 110, y: 136, w: 210, h: 66, title: 'Input and MAR', value: (s) => bin(s.mar, 4), act: ['Lm'],
         about: 'The memory address register latches an address from the bus when {Lm} is low and passes it to the RAM. The input switches let you program the memory by hand.' },
-      { id: 'ram', x: 110, y: 232, w: 210, h: 66, title: '16 × 8 RAM', value: (s) => `[${hex(s.mar, 1)}H] ${bin(s.ram[s.mar])}`, act: ['CE'],
+      { id: 'ram', x: 110, y: 232, w: 210, h: 66, title: '16 × 8 RAM', value: (s) => `[${hex(ramAddr(s), 1)}H] ${bin(s.ram[ramAddr(s)])}`, act: ['CE'],
         about: 'Sixteen 8-bit words of static RAM. During a run, a low {CE} puts the word at the MAR\'s address on the bus.' },
       { id: 'ir', x: 110, y: 328, w: 210, h: 66, title: 'Instruction register', value: (s) => `${bin(s.ir)}  ${LISTING_OF(s.ir)}`, act: ['Li', 'Ei'],
         about: 'Holds the current instruction. The upper nibble (op code) goes to the controller; the lower nibble (address) goes back on the bus when {Ei} is low.' },
