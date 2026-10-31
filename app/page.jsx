@@ -70,7 +70,7 @@ export default function Home() {
         <div 
           // Default: justify-between (pushes Title to left, Links to right)
           // md:justify-evenly (distributes all three elements equally on medium screens and up) ⬅️ UPDATED
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center md:justify-evenly"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap gap-y-2 justify-end items-center md:justify-evenly"
         >
           
           {/* Title: Uses the base classes for responsive font size */}
@@ -93,8 +93,13 @@ export default function Home() {
 
           <a
             href="/blog"
-            className={`${elementClasses} md:ml-0 md:mr-0`}
+            className={`${elementClasses} mr-6 md:ml-0 md:mr-0`}
           >blog</a>
+
+          <a
+            href="/sap1"
+            className={`${elementClasses} md:ml-0 md:mr-0`}
+          >sap-1</a>
         </div>
       </header>
 
