@@ -102,7 +102,7 @@ export default function Home() {
           >units</a>
 
           <a
-            href="/sap1"
+            href="https://reservetempo.github.io/sap-computer/"
             className={`${elementClasses} md:ml-0 md:mr-0`}
           >sap-1</a>
         </div>

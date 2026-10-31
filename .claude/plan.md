@@ -20,7 +20,7 @@
 
 ## Next
 
-11. **Remove /sap1 from this site and link out** (files: delete `app/sap1/`, edit `app/page.jsx`). BLOCKED until the standalone site in `C:\Users\DomPC\Desktop\websites\sap-computer` (see "After Next" below) is built and pushed, and the user has given its public URL. Delete the `app/sap1` folder, change the SAP-1 link on the homepage (`app/page.jsx`) to the new site's URL (opens the external site), and check nothing else imports from `app/sap1`. Check with the `next-dev` preview that the homepage renders and the link points to the new URL.
+(nothing)
 
 ## After Next (user request, 2026-10-31)
 
@@ -47,3 +47,4 @@ When tasks 1–10 are done, run `/z` in `C:\Users\DomPC\Desktop\websites\sap-com
 - Task 9a, guided tour logic and panel: 7b0b301. 12 missions, a first-visit card, a Tour button that resumes progress ("Start over" link), and a quest log above the info panel. `clears`/`writes` counters added to the sim. Runs ahead skip done steps; hints for the wrong mode; "Back to the panel" when the user leaves the panel.
 - Task 9b, tour spotlight: aca4b54. A `highlight` prop on `GamePanel` draws pulsing warm-white outlines with light dimming elsewhere. `TOUR_BOXES` export, `data-tour-id` on every section and control.
 - Task 10, final check and polish: 1e907e7. Renamed `tour.js` to `tourSteps.js`; the diagram SVG is now `role="group"`; hover is cleared on mode switch; focus moves to the SVG after a drill-down or going back up. Phone width, keyboard, reduced-motion CSS and the tour were checked, and `npm run build` is clean.
+- Task 11, link out to the standalone site: `app/sap1/` deleted; the homepage sap-1 link now goes to https://reservetempo.github.io/sap-computer/, and `next.config.js` redirects `/sap1` there (permanent). Checked in the `next-dev` preview.
