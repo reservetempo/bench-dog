@@ -10,7 +10,7 @@
 // Wire:   { pts: [[x, y], ...], bits?, bitsAt?: [x, y], on?: signal, arrow?: false, label?, labelAt?, anchor?, dots? }
 // Pin:    { sig, at: [x, y], dir: 'left' | 'right' | 'up' | 'down', len? }   short control-signal stub
 
-import { bin, hex, ramAddr } from './sap1Sim';
+import { OPS, bin, hex, ramAddr } from './sap1Sim';
 
 export const CANVAS = { w: 820, h: 600 };
 
@@ -426,10 +426,10 @@ export const ROOT = {
         about: 'The memory address register latches an address from the bus when {Lm} is low and passes it to the RAM. The input switches let you program the memory by hand.' },
       { id: 'ram', x: 110, y: 232, w: 210, h: 66, title: '16 × 8 RAM', value: (s) => `[${hex(ramAddr(s), 1)}H] ${bin(s.ram[ramAddr(s)])}`, act: ['CE'],
         about: 'Sixteen 8-bit words of static RAM. During a run, a low {CE} puts the word at the MAR\'s address on the bus.' },
-      { id: 'ir', x: 110, y: 328, w: 210, h: 66, title: 'Instruction register', value: (s) => `${bin(s.ir)}  ${LISTING_OF(s.ir)}`, act: ['Li', 'Ei'],
+      { id: 'ir', x: 110, y: 328, w: 210, h: 66, title: 'Instruction register', value: (s) => `${bin(s.ir)}  ${decodeWord(s.ir) ?? 'NOP'}`, act: ['Li', 'Ei'],
         about: 'Holds the current instruction. The upper nibble (op code) goes to the controller; the lower nibble (address) goes back on the bus when {Ei} is low.' },
       { id: 'ctrl', x: 110, y: 440, w: 210, h: 80, title: 'Controller-sequencer',
-        value: (s, d) => (s.halted ? 'halted' : `T${s.t} · ${s.t <= 3 ? 'fetch' : d.op}`),
+        value: (s, d) => (s.prog ? 'PROG · clock stopped' : s.halted ? 'halted' : `T${s.t} · ${s.t <= 3 ? 'fetch' : d.op}`),
         about: 'The control unit. A ring counter steps through T1–T6, the op code is decoded, and a control matrix combines the two into the 12-bit control word.' },
       { id: 'a', x: 500, y: 40, w: 210, h: 66, title: 'Accumulator', value: (s) => bin(s.a), act: ['La', 'Ea'],
         about: 'Holds intermediate answers. Loads from the bus when {La} is low, feeds the adder-subtracter all the time, and drives the bus when {Ea} is high.' },
@@ -483,15 +483,12 @@ export const ROOT = {
   children: { pc, mar, ram, ir, ctrl, a, alu, b, out },
 };
 
-function LISTING_OF(ir) {
-  const op = ir >> 4;
-  const addr = `${hex(ir & 15, 1)}H`;
-  if (op === 0x0) return `LDA ${addr}`;
-  if (op === 0x1) return `ADD ${addr}`;
-  if (op === 0x2) return `SUB ${addr}`;
-  if (op === 0xe) return 'OUT';
-  if (op === 0xf) return 'HLT';
-  return '—';
+// The instruction an 8-bit word stands for ('LDA 9H', 'OUT', ...), or null if its op code isn't
+// one of the five SAP-1 instructions.
+export function decodeWord(w) {
+  const op = OPS[(w >> 4) & 15];
+  if (!op) return null;
+  return op === 'OUT' || op === 'HLT' ? op : `${op} ${hex(w & 15, 1)}H`;
 }
 
 export function nodeAt(path) {

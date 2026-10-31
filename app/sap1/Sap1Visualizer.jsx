@@ -2,8 +2,24 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { CANVAS, ROOT, nodeAt, cleanPath } from "./sap1Parts";
-import { CON_ORDER, SIG, LISTING, bin, hex, derive, describe, initialState, step } from "./sap1Sim";
+import { CANVAS, ROOT, nodeAt, cleanPath, decodeWord } from "./sap1Parts";
+import {
+  CON_ORDER,
+  SIG,
+  PROGRAM,
+  bin,
+  hex,
+  clear,
+  derive,
+  describe,
+  initialState,
+  loadExample,
+  setProg,
+  step,
+  toggleAddrBit,
+  toggleDataBit,
+  write,
+} from "./sap1Sim";
 import { TEXTBOOK, cssVars } from "./theme";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
@@ -440,32 +456,154 @@ const BTN =
 const BTN_DISABLED =
   "disabled:border-[color:var(--sap-disabled)] disabled:text-[color:var(--sap-disabled)] disabled:hover:bg-transparent";
 
+// What each RAM word means to the program in memory. SAP-1 has no jumps, so a run goes from 0H to
+// the first HLT; the words its LDA/ADD/SUB instructions point at past that are data, and the
+// rest is never reached.
+function listing(ram) {
+  let end = ram.length - 1;
+  const data = new Set();
+  for (let i = 0; i < ram.length; i++) {
+    const op = ram[i] >> 4;
+    if (op <= 0x2) data.add(ram[i] & 15);
+    if (op === 0xf) {
+      end = i;
+      break;
+    }
+  }
+  return ram.map((v, i) => {
+    if (i > end && data.has(i)) return { text: `data ${v}`, kind: "data" };
+    return { text: decodeWord(v) ?? String(v), kind: i <= end ? "code" : "unused" };
+  });
+}
+
 function Memory({ sim, d }) {
   const reading = d.sig.has("CE");
+  const rows = useMemo(() => listing(sim.ram), [sim.ram]);
+  const isExample = sim.ram.every((v, i) => v === PROGRAM[i]);
   return (
     <section className="mt-6 border-t border-[color:var(--sap-rule)] pt-4">
       <h3 className="text-xs font-bold uppercase tracking-wide text-[color:var(--sap-muted)]">Memory</h3>
-      <p className="mt-1 text-sm text-[color:var(--sap-soft)]">Example 10-1 from the book: 1 + 2 + 3 − 4.</p>
+      <p className="mt-1 text-sm text-[color:var(--sap-soft)]">
+        {isExample ? "Example 10-1 from the book: 1 + 2 + 3 − 4." : "Your program. Load example puts Example 10-1 back."}
+      </p>
       <table className="mt-2 w-full font-mono text-[13px]">
         <tbody>
-          {sim.ram.map((v, i) => (
-            <tr
-              key={i}
-              className={
-                reading && sim.mar === i ? "bg-[color:var(--sap-accent-tint)] text-[color:var(--sap-accent)]" : ""
-              }
-            >
-              <td className="py-0.5 pl-1 pr-3 text-[color:var(--sap-muted)]">{hex(i, 1)}H</td>
-              <td className="pr-3">{bin(v)}</td>
-              <td className="pr-2">{LISTING[i]}</td>
-              <td className="pr-1 text-right text-[11px] text-[color:var(--sap-muted)]">
-                {[sim.pc === i && "PC", sim.mar === i && "MAR"].filter(Boolean).join(" ")}
-              </td>
-            </tr>
-          ))}
+          {sim.ram.map((v, i) => {
+            const here = d.ramAddr === i;
+            const hot = here && (sim.prog || reading);
+            return (
+              <tr
+                key={i}
+                aria-current={here ? "true" : undefined}
+                className={
+                  hot
+                    ? "bg-[color:var(--sap-accent-tint)] text-[color:var(--sap-accent)]"
+                    : here
+                      ? "bg-[color:var(--sap-hover)]"
+                      : ""
+                }
+              >
+                <td className="py-0.5 pl-1 pr-3 text-[color:var(--sap-muted)]">{hex(i, 1)}H</td>
+                <td className="pr-3">{bin(v)}</td>
+                <td className={`pr-2 ${rows[i].kind === "unused" && !hot ? "text-[color:var(--sap-faint)]" : ""}`}>
+                  {rows[i].text}
+                </td>
+                <td className="pr-1 text-right text-[11px] text-[color:var(--sap-muted)]">
+                  {[sim.pc === i && "PC", sim.mar === i && "MAR", sim.prog && sim.addrSw === i && "SW"]
+                    .filter(Boolean)
+                    .join(" ")}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      <p className="mt-2 text-xs text-[color:var(--sap-muted)]">
+        Grey words come after the first HLT, so a run never reaches them.
+      </p>
     </section>
+  );
+}
+
+// One front-panel bit switch: shows 0 or 1, lit when 1.
+function BitButton({ caption, label, on, onClick, className = "" }) {
+  return (
+    <span className={`flex flex-col items-center gap-0.5 ${className}`}>
+      <span aria-hidden="true" className="font-mono text-[10px] text-[color:var(--sap-muted)]">
+        {caption}
+      </span>
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={on}
+        onClick={onClick}
+        className={`h-7 w-7 border font-mono text-sm ${
+          on
+            ? "border-[color:var(--sap-accent)] bg-[color:var(--sap-accent)] text-[color:var(--sap-on-accent)]"
+            : "border-[color:var(--sap-ink)] hover:bg-[color:var(--sap-hover)]"
+        }`}
+      >
+        {on ? 1 : 0}
+      </button>
+    </span>
+  );
+}
+
+// PROG mode: the address switches (S1), data switches (S3) and Write (S4).
+function ProgSwitches({ sim, onAddrBit, onDataBit, onWrite }) {
+  const addr = sim.addrSw & 15;
+  const word = decodeWord(sim.dataSw);
+  return (
+    <div className="border border-b-0 border-[color:var(--sap-frame)] px-3 py-2">
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+        <div role="group" aria-label="Address switches" className="flex gap-1">
+          {[3, 2, 1, 0].map((i) => (
+            <BitButton
+              key={i}
+              caption={`A${i}`}
+              label={`Address bit ${i}`}
+              on={Boolean((addr >> i) & 1)}
+              onClick={() => onAddrBit(i)}
+            />
+          ))}
+        </div>
+        <div role="group" aria-label="Data switches" className="flex gap-1">
+          {[7, 6, 5, 4, 3, 2, 1, 0].map((i) => (
+            <BitButton
+              key={i}
+              caption={`D${i}`}
+              label={`Data bit ${i}`}
+              on={Boolean((sim.dataSw >> i) & 1)}
+              onClick={() => onDataBit(i)}
+              className={i === 3 ? "ml-2" : ""}
+            />
+          ))}
+        </div>
+        <button type="button" className={BTN} onClick={onWrite}>
+          Write
+        </button>
+      </div>
+      <p className="mt-2 flex flex-wrap gap-x-4 font-mono text-[13px]">
+        <span>
+          Address <span className="font-bold">{hex(addr, 1)}H</span>
+        </span>
+        <span>
+          Byte <span className="font-bold">{bin(sim.dataSw)}</span> = {hex(sim.dataSw)}H
+        </span>
+        <span>
+          {word ? (
+            <>
+              <span className="font-bold">{word}</span> as an instruction, or {sim.dataSw} as a number
+            </>
+          ) : (
+            <>Not an instruction; {sim.dataSw} as a number</>
+          )}
+        </span>
+      </p>
+      <p className="mt-1 text-xs text-[color:var(--sap-muted)]" aria-live="polite">
+        Set an address and a byte, then Write. Word {hex(addr, 1)}H holds {bin(sim.ram[addr])} now.
+      </p>
+    </div>
   );
 }
 
@@ -610,8 +748,8 @@ export default function Sap1Visualizer() {
     return () => clearInterval(id);
   }, [running]);
   useEffect(() => {
-    if (sim.halted) setRunning(false);
-  }, [sim.halted]);
+    if (sim.halted || sim.prog) setRunning(false);
+  }, [sim.halted, sim.prog]);
 
   // Paint the whole page (overscroll included) in the palette while this route is open.
   useEffect(() => {
@@ -642,6 +780,18 @@ export default function Sap1Visualizer() {
   );
 
   const btn = `${BTN} ${BTN_DISABLED}`;
+  const clockStopped = sim.halted || sim.prog;
+
+  const setMode = (on) => {
+    if (on) setRunning(false);
+    setSim((s) => setProg(s, on));
+  };
+
+  // describe() says "Reset" for HLT; the button is called Clear here.
+  const status =
+    sim.halted && !sim.prog
+      ? "HLT is in the instruction register, so the clock has stopped. Press Clear to run again."
+      : describe(sim);
 
   return (
     <PaletteContext.Provider value={pal}>
@@ -656,7 +806,8 @@ export default function Sap1Visualizer() {
           <h1 className="mt-2 text-4xl font-bold">sap-1</h1>
           <p className="mt-2 max-w-2xl text-[color:var(--sap-soft)]">
             The Simple-As-Possible computer from Malvino &amp; Brown&apos;s <i>Digital Computer Electronics</i>, chapter 10.
-            Click a part marked + to look inside it, and step the clock to watch the example program run.
+            Click a part marked + to look inside it, and step the clock to watch the example program run. Switch to
+            PROG to write your own program into memory.
           </p>
 
           <nav aria-label="Breadcrumb" className="mt-6 flex flex-wrap items-center gap-x-2 text-sm">
@@ -680,21 +831,64 @@ export default function Sap1Visualizer() {
           <div className="mt-3 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border border-b-0 border-[color:var(--sap-frame)] px-3 py-2">
-                <div className="flex gap-1.5">
+                <div role="group" aria-label="RUN / PROG switch" className="flex">
+                  {[
+                    ["RUN", false],
+                    ["PROG", true],
+                  ].map(([label, on], i) => (
+                    <button
+                      key={label}
+                      type="button"
+                      aria-pressed={sim.prog === on}
+                      onClick={() => setMode(on)}
+                      className={`border border-[color:var(--sap-ink)] px-2.5 py-1 font-mono text-[13px] ${
+                        i ? "-ml-px" : ""
+                      } ${
+                        sim.prog === on
+                          ? "bg-[color:var(--sap-ink)] text-[color:var(--sap-bg)]"
+                          : "hover:bg-[color:var(--sap-hover)]"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
                   <button
+                    type="button"
                     className={btn}
                     onClick={() => {
                       setRunning(false);
-                      setSim(initialState());
+                      setSim((s) => clear(s));
                     }}
                   >
-                    Reset
+                    Clear
                   </button>
-                  <button className={btn} disabled={sim.halted} onClick={() => setSim((s) => step(s))}>
+                  <button
+                    type="button"
+                    className={btn}
+                    disabled={clockStopped}
+                    onClick={() => setSim((s) => step(s))}
+                  >
                     Step
                   </button>
-                  <button className={`${btn} w-[4.5rem]`} disabled={sim.halted} onClick={() => setRunning((r) => !r)}>
+                  <button
+                    type="button"
+                    className={`${btn} w-[4.5rem]`}
+                    disabled={clockStopped}
+                    onClick={() => setRunning((r) => !r)}
+                  >
                     {running ? "Pause" : "Run"}
+                  </button>
+                  <button
+                    type="button"
+                    className={btn}
+                    onClick={() => {
+                      setRunning(false);
+                      setSim((s) => clear(loadExample(s)));
+                    }}
+                  >
+                    Load example
                   </button>
                 </div>
                 <div className="flex gap-1 font-mono text-[13px]" aria-label="T state">
@@ -720,6 +914,15 @@ export default function Sap1Visualizer() {
                   OUT <span className="font-bold">{bin(sim.out)}</span> = {sim.out}
                 </div>
               </div>
+
+              {sim.prog && (
+                <ProgSwitches
+                  sim={sim}
+                  onAddrBit={(i) => setSim((s) => toggleAddrBit(s, i))}
+                  onDataBit={(i) => setSim((s) => toggleDataBit(s, i))}
+                  onWrite={() => setSim((s) => write(s))}
+                />
+              )}
 
               <div className="overflow-x-auto border border-[color:var(--sap-frame)]">
                 <svg
@@ -765,9 +968,13 @@ export default function Sap1Visualizer() {
 
               <p className="border border-t-0 border-[color:var(--sap-frame)] px-3 py-2 text-sm" aria-live="polite">
                 <span className="font-bold">
-                  {sim.halted ? "Halted" : `T${sim.t} · ${sim.t <= 3 ? "fetch" : `execute ${d.op}`}`}
+                  {sim.prog
+                    ? "PROG · clock stopped"
+                    : sim.halted
+                      ? "Halted"
+                      : `T${sim.t} · ${sim.t <= 3 ? "fetch" : `execute ${d.op}`}`}
                 </span>{" "}
-                — {describe(sim)}
+                — {status}
               </p>
               <p className="mt-2 text-xs text-[color:var(--sap-muted)]">
                 Red marks what is active in this T state. Esc or the breadcrumbs go back up a level.
