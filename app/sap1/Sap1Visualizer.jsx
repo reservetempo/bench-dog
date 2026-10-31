@@ -23,7 +23,7 @@ import { PALETTES, TEXTBOOK, cssVars } from "./theme";
 import { signalType } from "./signalTypes";
 import { HtmlText, SvgText } from "./sigText";
 import GamePanel, { PANEL_BOXES } from "./GamePanel";
-import GameDiagram, { bitsMarker } from "./gameParts";
+import GameDiagram, { Pulse, bitsMarker, mix, trimEnd } from "./gameParts";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
 // matching CSS variables (--sap-*) set on the page root. An active part is drawn in the color of
@@ -41,6 +41,14 @@ const RATE_LABELS = [
   ["fast", "Fast"],
 ];
 const MODE_KEY = "sap1-mode"; // localStorage: "game" | "textbook"
+
+// The textbook wires' pulse: a thin pale dash running along each lit wire, the same keyframes as
+// game mode's gm-pulse (see Pulse in gameParts.jsx). Off under reduced motion.
+const TB_CSS = `
+.tb-pulse { animation-name: tb-pulse; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes tb-pulse { to { stroke-dashoffset: -100; } }
+@media (prefers-reduced-motion: reduce) { .tb-pulse { display: none; } }`;
+const TB_ARROW_TRIM = 8; // the pulse stops where a wire's arrowhead begins
 
 // --- geometry & animation helpers -----------------------------------------------------------
 
@@ -95,12 +103,15 @@ const pathFromHash = () =>
 // The textbook drawing. Game mode draws the levels below the front panel as hardware instead
 // (gameParts.jsx), from the same data.
 
-function Wire({ w, d }) {
+// A connection; while lit, a pulse runs along it from driver (first point) to loader (last point)
+// once per clock period stepMs.
+function Wire({ w, d, stepMs }) {
   const P = usePalette();
   const on = Boolean(w.on && d.sig.has(w.on));
   const type = signalType(w);
   const color = on ? P.type[type] : P.ink;
   const m = w.bits ? bitsMarker(w.pts, w.bitsAt) : null;
+  const arrow = w.arrow !== false;
   return (
     <g>
       <polyline
@@ -109,8 +120,17 @@ function Wire({ w, d }) {
         stroke={color}
         strokeWidth={on ? 2.5 : 1.5}
         strokeLinejoin="round"
-        markerEnd={w.arrow === false ? undefined : `url(#sap1-arrow-${on ? type : "off"})`}
+        markerEnd={arrow ? `url(#sap1-arrow-${on ? type : "off"})` : undefined}
       />
+      {on && stepMs > 0 && (
+        <Pulse
+          className="tb-pulse"
+          pts={arrow ? trimEnd(w.pts, TB_ARROW_TRIM) : w.pts}
+          stroke={mix(color, "#ffffff", 0.6)}
+          width={1.2}
+          stepMs={stepMs}
+        />
+      )}
       {m && (
         <g>
           <line
@@ -371,13 +391,13 @@ function Block({ b, sim, d, path, drill, focused, onEnter, onLeave, onActivate }
   );
 }
 
-function Diagram({ node, path, sim, d, focusId, onEnter, onLeave, onActivate }) {
+function Diagram({ node, path, sim, d, focusId, onEnter, onLeave, onActivate, stepMs }) {
   const P = usePalette();
   const dg = node.diagram;
   return (
     <>
       {dg.groups?.map((g, i) => <Group key={`g${i}`} g={g} sim={sim} d={d} path={path} />)}
-      {dg.wires?.map((w, i) => <Wire key={`w${i}`} w={w} d={d} />)}
+      {dg.wires?.map((w, i) => <Wire key={`w${i}`} w={w} d={d} stepMs={stepMs} />)}
       {dg.pins?.map((p, i) => <Pin key={`p${i}`} p={p} d={d} />)}
       {dg.notes?.map((n, i) => (
         <text key={`n${i}`} x={n.at[0]} y={n.at[1]} textAnchor={n.anchor ?? "middle"} fontSize={11.5} fill={P.muted}>
@@ -955,6 +975,7 @@ export default function Sap1Visualizer() {
                   aria-label={showPanel ? "SAP-1 front panel" : `${node.title} diagram`}
                 >
                   <defs>
+                    <style>{TB_CSS}</style>
                     {[["off", pal.ink], ...Object.entries(pal.type)].map(([id, color]) => (
                       <marker
                         key={id}
@@ -998,6 +1019,7 @@ export default function Sap1Visualizer() {
                         onEnter={onEnter}
                         onLeave={onLeave}
                         onActivate={onActivate}
+                        stepMs={stepMs}
                       />
                     ) : (
                       <Diagram
@@ -1009,6 +1031,7 @@ export default function Sap1Visualizer() {
                         onEnter={onEnter}
                         onLeave={onLeave}
                         onActivate={onActivate}
+                        stepMs={stepMs}
                       />
                     )}
                   </g>

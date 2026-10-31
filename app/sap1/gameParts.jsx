@@ -7,7 +7,8 @@
 // only the drawing differs. Gradients, patterns, filters and arrowheads are defined once, in
 // GameDefs, with gm-* ids (the front panel uses gp-*).
 //
-// Pieces to reuse: Jumper (one wire, idle or lit), Led (one lamp), wireColor(type, on).
+// Pieces to reuse: Jumper (one wire, idle or lit), Led (one lamp), wireColor(type, on), Pulse (a
+// dash that runs along a lit wire, from driver to loader, once per clock period).
 
 import { CANVAS } from "./sap1Parts";
 import { CON_ORDER, bin, hex } from "./sap1Sim";
@@ -25,7 +26,7 @@ const PRINT_SUB = "#8f8d86";
 const EDGE = "#050806"; // wire insulation, shadows
 
 // Blend two #rrggbb colors (t = 0 → a, 1 → b).
-function mix(a, b, t) {
+export function mix(a, b, t) {
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const [x, y] = [rgb(a), rgb(b)];
   return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("")}`;
@@ -63,6 +64,20 @@ export function bitsMarker(pts, at) {
 
 const ARROW_TRIM = 7; // a wire with an arrowhead stops this far short of its end; the head covers it
 
+// The pulse and flash animations. A pulse is a dash on a polyline with pathLength 100: its
+// dasharray is "<dash> 100" and its dashoffset starts at <dash> (just before the start), so moving
+// the offset to -100 carries it from the first point to just past the last, then it loops.
+// Reduced motion keeps the lit wires and drops the movement.
+const GM_CSS = `
+.gm-pulse { animation-name: gm-pulse; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes gm-pulse { to { stroke-dashoffset: -100; } }
+.gm-flash { animation: gm-flash 450ms ease-out; }
+@keyframes gm-flash { from { opacity: 1; } to { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) {
+  .gm-pulse { display: none; }
+  .gm-flash { animation: none; }
+}`;
+
 function GameDefs() {
   const lin = (id, stops, vertical = true) => (
     <linearGradient key={id} id={id} x1="0" y1="0" x2={vertical ? "0" : "1"} y2={vertical ? "1" : "0"}>
@@ -78,6 +93,7 @@ function GameDefs() {
   ];
   return (
     <defs>
+      <style>{GM_CSS}</style>
       <pattern id="gm-board-holes" width="20" height="20" patternUnits="userSpaceOnUse">
         <circle cx="10" cy="10" r="1.9" fill="none" stroke="#1a2e22" strokeWidth="0.7" />
         <circle cx="10" cy="10" r="1" fill="#000" opacity="0.55" />
@@ -174,8 +190,8 @@ function GameDefs() {
 
 const pointsAttr = (pts) => pts.map((p) => p.join(",")).join(" ");
 
-// The path with its last point pulled back by `by` px.
-function trimEnd(pts, by) {
+// The path with its last point pulled back by `by` px. Shared with the textbook Wire.
+export function trimEnd(pts, by) {
   const out = pts.map((p) => [...p]);
   const [x1, y1] = out[out.length - 2];
   const [x2, y2] = out[out.length - 1];
@@ -184,12 +200,45 @@ function trimEnd(pts, by) {
   return out;
 }
 
+// A pulse runs the length of its wire once per clock period, but never faster than this, so it
+// still reads at the fast rate.
+const PULSE_MIN_MS = 300;
+
+const pathLength = (pts) => pts.slice(1).reduce((n, [x, y], i) => n + Math.hypot(x - pts[i][0], y - pts[i][1]), 0);
+
+// A bright dash travelling along pts, from the first point to the last, looping (see GM_CSS for
+// the dash math). className picks the keyframes: gm-pulse here, tb-pulse in the textbook drawing.
+// The dash is about 26 px long, kept between 5% and 40% of the wire.
+export function Pulse({ pts, stroke, width, stepMs, className = "gm-pulse", opacity }) {
+  const dash = Math.min(40, Math.max(5, (26 / Math.max(1, pathLength(pts))) * 100));
+  return (
+    <polyline
+      className={className}
+      points={pointsAttr(pts)}
+      pathLength={100}
+      fill="none"
+      stroke={stroke}
+      strokeWidth={width}
+      strokeOpacity={opacity}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeDasharray={`${dash.toFixed(2)} 100`}
+      strokeDashoffset={dash.toFixed(2)}
+      style={{ animationDuration: `${Math.max(stepMs, PULSE_MIN_MS)}ms` }}
+    />
+  );
+}
+
 // One jumper wire along pts ([[x, y], ...]) in the color of its signal type: dim when idle; when
-// lit, bright with a soft glow (wide translucent strokes, so no filter is needed).
-export function Jumper({ pts, type, on, arrow = false }) {
+// lit, bright with a soft glow (wide translucent strokes, so no filter is needed) and, given the
+// clock period stepMs, a pulse running from the first point to the last (from the last to the
+// first when reverse is set).
+export function Jumper({ pts, type, on, arrow = false, stepMs, reverse = false }) {
   const color = wireColor(type, on);
   const full = pointsAttr(pts);
-  const body = arrow ? pointsAttr(trimEnd(pts, ARROW_TRIM)) : full;
+  const bodyPts = arrow ? trimEnd(pts, ARROW_TRIM) : pts;
+  const body = pointsAttr(bodyPts);
+  const pulsePts = reverse ? [...bodyPts].reverse() : bodyPts;
   const line = { fill: "none", strokeLinejoin: "round" };
   return (
     <g>
@@ -204,6 +253,8 @@ export function Jumper({ pts, type, on, arrow = false }) {
         markerEnd={arrow ? `url(#gm-arrow-${on ? "on" : "off"}-${type})` : undefined}
       />
       {on && <polyline points={body} {...line} stroke={mix(color, "#ffffff", 0.6)} strokeWidth={0.8} strokeOpacity={0.8} />}
+      {on && stepMs > 0 && <Pulse pts={pulsePts} stroke={color} width={7} opacity={0.35} stepMs={stepMs} />}
+      {on && stepMs > 0 && <Pulse pts={pulsePts} stroke={mix(color, "#ffffff", 0.75)} width={2.6} stepMs={stepMs} />}
     </g>
   );
 }
@@ -218,7 +269,7 @@ function Solder({ x, y, color }) {
   );
 }
 
-function GameWire({ w, d }) {
+function GameWire({ w, d, stepMs }) {
   const on = Boolean(w.on && d.sig.has(w.on));
   const type = signalType(w);
   const color = wireColor(type, on);
@@ -227,7 +278,7 @@ function GameWire({ w, d }) {
   const tick = m && (m.h ? [m.x - 4, m.y + 6, m.x + 4, m.y - 6] : [m.x - 6, m.y + 4, m.x + 6, m.y - 4]);
   return (
     <g>
-      <Jumper pts={w.pts} type={type} on={on} arrow={w.arrow !== false} />
+      <Jumper pts={w.pts} type={type} on={on} arrow={w.arrow !== false} stepMs={stepMs} />
       {m && (
         <g>
           <line x1={tick[0]} y1={tick[1]} x2={tick[2]} y2={tick[3]} stroke={EDGE} strokeWidth={3.6} strokeLinecap="round" />
@@ -263,7 +314,8 @@ function GameWire({ w, d }) {
 }
 
 // A control line coming in from elsewhere: a short jumper ending in a pad, with its signal name.
-function GamePin({ p, d }) {
+// Its pulse runs from the pad in to the part.
+function GamePin({ p, d, stepMs }) {
   const on = CON_ORDER.includes(p.sig) && d.sig.has(p.sig);
   const type = signalType(p);
   const color = wireColor(type, on);
@@ -283,6 +335,8 @@ function GamePin({ p, d }) {
         ]}
         type={type}
         on={on}
+        stepMs={stepMs}
+        reverse
       />
       <circle cx={x2} cy={y2} r={3.4} fill={EDGE} />
       <circle cx={x2} cy={y2} r={2.3} fill={color} />
@@ -506,7 +560,8 @@ const PIN_OUT = 6; // how far a chip's pins stick out of its package
 const PITCH = 24; // pin spacing
 
 // A chip: a black DIP package with a row of pins along each long side, a notch and a pin-1 dot.
-function GameChip({ b, sim, d, path, drill, focused, ev }) {
+// While active it glows, and the glow flares briefly at each new T state.
+function GameChip({ b, sim, d, path, drill, focused, ev, stepMs }) {
   const active = Boolean(b.act?.some((k) => d.sig.has(k)));
   const hot = P.type[signalType(b, { d, path })];
   const value = b.value?.(sim, d);
@@ -548,7 +603,21 @@ function GameChip({ b, sim, d, path, drill, focused, ev }) {
   return (
     <g {...handlers(b, drill, ev)}>
       <Hit b={b} />
-      {active && <rect x={bx - 2} y={by - 2} width={bw + 4} height={bh + 4} rx={6} fill={hot} opacity={0.5} filter="url(#gm-glow)" />}
+      {active && (
+        <rect
+          key={`glow-${sim.cycles}`}
+          className="gm-flash"
+          x={bx - 2}
+          y={by - 2}
+          width={bw + 4}
+          height={bh + 4}
+          rx={6}
+          fill={hot}
+          opacity={0.5}
+          filter="url(#gm-glow)"
+          style={stepMs ? { animationDuration: `${Math.round(Math.min(450, stepMs * 0.9))}ms` } : undefined}
+        />
+      )}
       {legs}
       <rect
         x={bx}
@@ -711,8 +780,9 @@ function GameCon({ b, d, drill, focused, ev }) {
 
 const BLOCKS = { switch: GameSwitch, display: GameDisplay, bus: GameBus, con: GameCon };
 
-// A diagram level (a node of sap1Parts.js) drawn as hardware. Same props as the textbook Diagram.
-export default function GameDiagram({ node, path, sim, d, focusId, onEnter, onLeave, onActivate }) {
+// A diagram level (a node of sap1Parts.js) drawn as hardware. Same props as the textbook Diagram,
+// including stepMs, the clock period that times the wire pulses.
+export default function GameDiagram({ node, path, sim, d, focusId, onEnter, onLeave, onActivate, stepMs }) {
   const dg = node.diagram;
   const ev = { onEnter, onLeave, onActivate };
   return (
@@ -721,8 +791,8 @@ export default function GameDiagram({ node, path, sim, d, focusId, onEnter, onLe
       <rect x={0} y={0} width={CANVAS.w} height={CANVAS.h} fill={BOARD} />
       <rect x={0} y={0} width={CANVAS.w} height={CANVAS.h} fill="url(#gm-board-holes)" />
       {dg.groups?.map((g, i) => <GameGroup key={`g${i}`} g={g} sim={sim} d={d} path={path} />)}
-      {dg.wires?.map((w, i) => <GameWire key={`w${i}`} w={w} d={d} />)}
-      {dg.pins?.map((p, i) => <GamePin key={`p${i}`} p={p} d={d} />)}
+      {dg.wires?.map((w, i) => <GameWire key={`w${i}`} w={w} d={d} stepMs={stepMs} />)}
+      {dg.pins?.map((p, i) => <GamePin key={`p${i}`} p={p} d={d} stepMs={stepMs} />)}
       {dg.notes?.map((n, i) => (
         <text key={`n${i}`} x={n.at[0]} y={n.at[1]} textAnchor={n.anchor ?? "middle"} fontSize={11.5} fill={P.muted} {...HALO}>
           <SvgText text={n.text} />
@@ -740,6 +810,7 @@ export default function GameDiagram({ node, path, sim, d, focusId, onEnter, onLe
             drill={Boolean(node.children?.[b.id])}
             focused={focusId === b.id}
             ev={ev}
+            stepMs={stepMs}
           />
         );
       })}
