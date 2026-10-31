@@ -20,8 +20,6 @@
 
 ## Next
 
-10. **Final check and polish** (any `app/sap1/*` file; needs 9a and 9b). The project has no ESLint config (`next lint` only offers to set one up), so skip lint; stop the dev server and run `npm run build`, and fix any errors. Also fix: the diagram `<svg>` has `role="img"`, which hides the panel's controls and sections from screen readers (use a group role or drop it, and keep an accessible name). And: switching to Textbook while hovering a panel section leaves that part shown in the info panel. Check `/sap1` in both modes at desktop and phone width (375px): no horizontal page scroll outside the diagram frame, text readable, controls reachable. Check keyboard: tab through panel controls and blocks, Enter/Space work, Esc goes up a level. Check `prefers-reduced-motion` turns off the travelling effects. Also rename `app/sap1/tour.js` to `app/sap1/tourSteps.js` (it clashes with `Tour.jsx` on case-insensitive Windows module resolution; imports currently spell out `./Tour.jsx` / `./tour.js` as a workaround) and update the imports. Smoke-test the guided tour from a fresh visit (clear localStorage) once more after all changes. Fix small issues; report anything bigger as leftover work.
-
 11. **Remove /sap1 from this site and link out** (files: delete `app/sap1/`, edit `app/page.jsx`). BLOCKED until the standalone site in `C:\Users\DomPC\Desktop\websites\sap-computer` (see "After Next" below) is built and pushed, and the user has given its public URL. Delete the `app/sap1` folder, change the SAP-1 link on the homepage (`app/page.jsx`) to the new site's URL (opens the external site), and check nothing else imports from `app/sap1`. Check with the `next-dev` preview that the homepage renders and the link points to the new URL.
 
 ## After Next (user request, 2026-10-31)
@@ -30,6 +28,8 @@ When tasks 1–10 are done, run `/z` in `C:\Users\DomPC\Desktop\websites\sap-com
 - Stack: **Vite + React** static site (the SAP-1 code is client-only React; port the Tailwind classes and the `app/sap1/*` files, and replace Next-specific bits such as `metadata`, `next/link` and the "← home" link).
 - Git: `git init -b main` and a **new public GitHub repo** `sap-computer` on the `reservetempo` account (via `gh repo create`), pushed from there.
 - Extras: an **about/credits footer** crediting Malvino & Brown's *Digital Computer Electronics* and linking back to the main site. No landing section, no deploy config for now.
+- Also in the new project: on phones the tour's mission text sits below the diagram, so make the mission card sticky or collapsible near the panel (follow-up from task 10).
+- Still for the user to check by eye: animations with the OS reduced-motion setting on, and the zoom/animations at FAST in a visible window. The agents' browser pane was hidden, so they couldn't watch them run.
 - Then come back here for task 11 (remove `/sap1`, link the homepage to the new site's URL once the user gives it).
 
 ## Done
@@ -46,3 +46,4 @@ When tasks 1–10 are done, run `/z` in `C:\Users\DomPC\Desktop\websites\sap-com
 - Task 8c, wire pulses: 0d20b61. A dash travels from driver to loader along active wires, once per step (minimum 300 ms): a pale type-color tint with a halo in Game drill-downs, a light-red tint in Textbook. Active chips flare on each T state. Not yet checked with the real reduced-motion setting or watched at FAST in a visible window.
 - Task 9a, guided tour logic and panel: 7b0b301. 12 missions, a first-visit card, a Tour button that resumes progress ("Start over" link), and a quest log above the info panel. `clears`/`writes` counters added to the sim. Runs ahead skip done steps; hints for the wrong mode; "Back to the panel" when the user leaves the panel.
 - Task 9b, tour spotlight: aca4b54. A `highlight` prop on `GamePanel` draws pulsing warm-white outlines with light dimming elsewhere. `TOUR_BOXES` export, `data-tour-id` on every section and control.
+- Task 10, final check and polish: 1e907e7. Renamed `tour.js` to `tourSteps.js`; the diagram SVG is now `role="group"`; hover is cleared on mode switch; focus moves to the SVG after a drill-down or going back up. Phone width, keyboard, reduced-motion CSS and the tour were checked, and `npm run build` is clean.
