@@ -24,7 +24,7 @@ import { signalType } from "./signalTypes";
 import { HtmlText, SvgText } from "./sigText";
 import GamePanel, { PANEL_BOXES } from "./GamePanel";
 import GameDiagram, { Pulse, bitsMarker, mix, trimEnd } from "./gameParts";
-import { TourInvite, TourPanel, useTour } from "./Tour.jsx";
+import { TourInvite, TourPanel, useTour } from "./Tour";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
 // matching CSS variables (--sap-*) set on the page root. An active part is drawn in the color of
@@ -664,6 +664,10 @@ export default function Sap1Visualizer() {
       setHoverId(null);
       setSelectedId(null);
     });
+    // The focused part (or breadcrumb) may have just unmounted, which drops keyboard focus to
+    // the page; keep it in the diagram so the next Tab reaches the new level's parts.
+    const ae = document.activeElement;
+    if (!ae || ae === document.body || !ae.isConnected) svgRef.current?.focus({ preventScroll: true });
     pathRef.current = next;
     if (push) {
       const url = next.length ? `#/${next.join("/")}` : window.location.pathname + window.location.search;
@@ -739,6 +743,12 @@ export default function Sap1Visualizer() {
     }
   }, []);
   const chooseMode = (m) => {
+    // The other mode draws different parts, so a hover or selection from this one would linger
+    // in the info panel (the hovered part unmounts without a pointer-leave).
+    if (m !== modeRef.current) {
+      setHoverId(null);
+      setSelectedId(null);
+    }
     setMode(m);
     try {
       window.localStorage.setItem(MODE_KEY, m);
@@ -997,8 +1007,9 @@ export default function Sap1Visualizer() {
                 <svg
                   ref={svgRef}
                   viewBox={FULL.join(" ")}
-                  className="block h-auto w-full min-w-[680px] select-none"
-                  role="img"
+                  className="block h-auto w-full min-w-[680px] select-none outline-none"
+                  tabIndex={-1}
+                  role="group"
                   aria-label={showPanel ? "SAP-1 front panel" : `${node.title} diagram`}
                 >
                   <defs>

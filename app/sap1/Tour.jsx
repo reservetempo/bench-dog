@@ -1,10 +1,10 @@
 "use client";
 
 // The guided tour's state (useTour) and its two pieces of UI for the right-hand column: the
-// first-visit invite card and the mission log. The steps and their checks are in tour.js.
+// first-visit invite card and the mission log. The steps and their checks are in tourSteps.js.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LAST, STEPS, TOUR_KEY, TOUR_START, advance } from "./tour.js";
+import { LAST, STEPS, TOUR_KEY, TOUR_START, advance } from "./tourSteps";
 import { HtmlText } from "./sigText";
 
 const EMPTY = [];
