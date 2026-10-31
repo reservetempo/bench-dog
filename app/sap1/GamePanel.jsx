@@ -88,8 +88,14 @@ const bitLamps = (value, xs, color) =>
     color: typeof color === "function" ? color(i) : color,
   }));
 
-// A row of lamps ({ x, on, color }), drawn in three layers so a lit lamp's glow spills over the
-// panel and its neighbours while its lens stays crisp.
+// The CSS classes of a lamp's fading layers: LEDs snap on and off in ~80 ms, the warm-white
+// (incandescent) lamps warm up and cool down a little slower. See PANEL_CSS.
+const ledClass = (l) => `gp-led${l.color === "white" ? " gp-warm" : ""}${l.on ? " gp-on" : ""}`;
+
+// A row of lamps ({ x, on, color, pulse?, breathe? }), drawn in three layers so a lit lamp's glow
+// spills over the panel and its neighbours while its lens stays crisp. The lit layers are always
+// there and fade in and out (an unlit glow is also hidden, so its blur costs nothing). pulse: a
+// count; each new value flares the lamp once if it is lit. breathe: a lit lamp pulses slowly.
 function Lamps({ lamps, cy, r = 6.5 }) {
   return (
     <g>
@@ -103,27 +109,69 @@ function Lamps({ lamps, cy, r = 6.5 }) {
             strokeOpacity={0.1}
             strokeWidth={0.8}
           />
-          {!l.on && <circle cx={l.x} cy={cy} r={r} fill={`url(#gp-off-${l.color})`} />}
+          <circle cx={l.x} cy={cy} r={r} fill={`url(#gp-off-${l.color})`} />
         </g>
       ))}
-      {lamps.map((l, i) =>
-        l.on ? (
-          <circle key={`h${i}`} cx={l.x} cy={cy} r={r * 2} fill={P.led[l.color].on} opacity={0.42} filter="url(#gp-glow)" />
-        ) : null
-      )}
+      {lamps.map((l, i) => (
+        <g
+          key={`h${i}`}
+          className={`${ledClass(l)}${l.on && l.breathe ? " gp-breathe" : ""}`}
+          style={{ opacity: l.on ? 1 : 0, visibility: l.on ? "visible" : "hidden" }}
+        >
+          <circle cx={l.x} cy={cy} r={r * 2} fill={P.led[l.color].on} opacity={0.42} filter="url(#gp-glow)" />
+        </g>
+      ))}
       {lamps.map((l, i) => (
         <g key={`l${i}`}>
-          {l.on && <circle cx={l.x} cy={cy} r={r} fill={`url(#gp-on-${l.color})`} />}
+          <circle
+            className={`${ledClass(l)}${l.on && l.breathe ? " gp-breathe" : ""}`}
+            cx={l.x}
+            cy={cy}
+            r={r}
+            fill={`url(#gp-on-${l.color})`}
+            style={{ opacity: l.on ? 1 : 0 }}
+          />
+          {l.on && l.pulse > 0 && (
+            <circle key={l.pulse} className="gp-pulse" cx={l.x} cy={cy} r={r * 1.9} fill={P.led[l.color].on} filter="url(#gp-glow)" />
+          )}
           <ellipse
+            className={ledClass(l)}
             cx={l.x - r * 0.32}
             cy={cy - r * 0.4}
             rx={r * 0.42}
             ry={r * 0.24}
             fill="#fff"
-            opacity={l.on ? 0.55 : 0.16}
+            style={{ opacity: l.on ? 0.55 : 0.16 }}
           />
         </g>
       ))}
+    </g>
+  );
+}
+
+// The CLOCK lamp by the ring counter: dark between ticks, it blinks once on each clock pulse
+// (`tick` counts them; a new key restarts the blink). With reduced motion it shows the clock's
+// level instead (`level`), switching instantly.
+function ClockLamp({ x, cy, tick, level }) {
+  const r = 4.5;
+  const lit = (
+    <>
+      <circle cx={x} cy={cy} r={r * 2.2} fill={P.led.white.on} opacity={0.5} filter="url(#gp-glow)" />
+      <circle cx={x} cy={cy} r={r} fill="url(#gp-on-white)" />
+      <ellipse cx={x - r * 0.32} cy={cy - r * 0.4} rx={r * 0.42} ry={r * 0.24} fill="#fff" opacity={0.55} />
+    </>
+  );
+  return (
+    <g pointerEvents="none">
+      <Lamps cy={cy} r={r} lamps={[{ x, on: false, color: "white" }]} />
+      {tick > 0 && (
+        <g key={tick} className="gp-blink">
+          {lit}
+        </g>
+      )}
+      <g className="gp-rm" opacity={level ? 1 : 0}>
+        {lit}
+      </g>
     </g>
   );
 }
@@ -232,6 +280,11 @@ function Defs() {
           <stop offset="0.7" stopColor={off} />
           <stop offset="1" stopColor={mix(off, "#000000", 0.45)} />
         </radialGradient>,
+        <radialGradient key={`sweep-${c}`} id={`gp-sweep-${c}`}>
+          <stop offset="0" stopColor={mix(on, "#ffffff", 0.35)} stopOpacity="0.8" />
+          <stop offset="0.4" stopColor={on} stopOpacity="0.38" />
+          <stop offset="1" stopColor={on} stopOpacity="0" />
+        </radialGradient>,
       ])}
     </defs>
   );
@@ -285,8 +338,9 @@ function Case() {
 
 // A silkscreened box around one part. It acts like the part's block in the diagram: hover or
 // focus shows it in the info panel, click / Enter / Space opens it (or selects it when it has no
-// inside). It is outlined in its signal type's color while the part is active.
-function Section({ id, ctx, title, sub, tx, ty, children }) {
+// inside). It is outlined in its signal type's color while the part is active. flash: a count of
+// the changes to the part's value; each new count flashes the outline and title once.
+function Section({ id, ctx, title, sub, tx, ty, flash = 0, children }) {
   const { d, focusId, onEnter, onLeave, onActivate, onOpen } = ctx;
   const b = PANEL_BOXES[id];
   const block = BLOCKS[id];
@@ -338,6 +392,17 @@ function Section({ id, ctx, title, sub, tx, ty, children }) {
         </Silk>
       )}
       {drill && <PlusMark x={b.x + b.w - 12} y={b.y + 12} focused={focused} />}
+      {flash > 0 && (
+        <g key={flash} className="gp-flash">
+          <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={4} fill={hot} opacity={0.1} />
+          <rect x={b.x + 1} y={b.y + 1} width={b.w - 2} height={b.h - 2} rx={3} fill="none" stroke={mix(hot, "#ffffff", 0.3)} strokeWidth={2.2} />
+          <g filter="url(#gp-text-glow)">
+            <Silk x={x} y={y} size={12.5} spacing={3} weight={700} fill={mix(hot, "#ffffff", 0.3)}>
+              {title}
+            </Silk>
+          </g>
+        </g>
+      )}
       {children}
     </g>
   );
@@ -351,11 +416,11 @@ const byte = (v) => `${bin(v)} · ${hex(v)}H`;
 const nibble = (v) => `${bin(v, 4)} · ${hex(v, 1)}H`;
 
 // A plain register: n lamps of one color and its value underneath.
-function Register({ id, ctx, title, sub, value, bits, color }) {
+function Register({ id, ctx, title, sub, value, bits, color, flash }) {
   const b = B[id];
   const xs = bits === 4 ? lampXs(4, mid(id), 20) : lampXs(8, mid(id), 18, 6);
   return (
-    <Section id={id} ctx={ctx} title={title} sub={sub}>
+    <Section id={id} ctx={ctx} title={title} sub={sub} flash={flash}>
       <Lamps cy={b.y + LAMP_Y} lamps={bitLamps(value, xs, color)} />
       <Readout x={mid(id)} y={b.y + READ_Y}>
         {bits === 4 ? nibble(value) : byte(value)}
@@ -364,12 +429,12 @@ function Register({ id, ctx, title, sub, value, bits, color }) {
   );
 }
 
-function InstructionRegister({ ctx, ir }) {
+function InstructionRegister({ ctx, ir, flash }) {
   const b = B.ir;
   const lx = b.x + 108; // centre of the lamps
   const win = { x: b.x + 196, y: b.y + 38, w: 96, h: 34 };
   return (
-    <Section id="ir" ctx={ctx} title="IR" sub="INSTRUCTION REGISTER" tx={lx}>
+    <Section id="ir" ctx={ctx} title="IR" sub="INSTRUCTION REGISTER" tx={lx} flash={flash}>
       <Lamps
         cy={b.y + LAMP_Y}
         lamps={[...bitLamps(ir >> 4, lampXs(4, lx - 38, 18), "green"), ...bitLamps(ir & 15, lampXs(4, lx + 38, 18), "amber")]}
@@ -422,7 +487,9 @@ function AluBadge({ d }) {
   );
 }
 
-function Bus({ ctx, d }) {
+// tick: a count of clock pulses. While the bus is driven, each one sends a glow along the lines
+// in use, in their color.
+function Bus({ ctx, d, tick }) {
   const b = B.bus;
   const addr = d.busBits === 4;
   const xs = lampXs(8, mid("bus"), 18, 6);
@@ -431,9 +498,22 @@ function Bus({ ctx, d }) {
   const driver = whoBy(DRIVERS, d.sig);
   const loader = whoBy(LOADERS, d.sig);
   const sub = d.bus === null ? "NOT DRIVEN" : `${driver} → ${loader ?? "—"}`;
+  const [x0, x1] = [xs[addr ? 4 : 0] - 14, xs[7] + 14];
   return (
     <Section id="bus" ctx={ctx} title="W BUS" sub={sub}>
       <Lamps cy={b.y + LAMP_Y} lamps={bitLamps(d.bus, xs, color)} />
+      {d.bus !== null && tick > 0 && (
+        <ellipse
+          key={tick}
+          className="gp-sweep"
+          cx={x0}
+          cy={b.y + LAMP_Y}
+          rx={20}
+          ry={12}
+          fill={`url(#gp-sweep-${addr ? "amber" : "green"})`}
+          style={{ "--gp-dx": `${x1 - x0}px` }}
+        />
+      )}
       <Readout x={mid("bus")} y={b.y + READ_Y}>
         {d.bus === null ? "---- ---- · --" : addr ? nibble(d.bus) : byte(d.bus)}
       </Readout>
@@ -441,12 +521,12 @@ function Bus({ ctx, d }) {
   );
 }
 
-function Output({ ctx, out }) {
+function Output({ ctx, out, flash }) {
   const b = B.out;
   const lx = b.x + 138;
   const win = { x: b.x + 266, y: b.y + 36, w: 116, h: 46 };
   return (
-    <Section id="out" ctx={ctx} title="OUT" sub="OUTPUT REGISTER" tx={lx}>
+    <Section id="out" ctx={ctx} title="OUT" sub="OUTPUT REGISTER" tx={lx} flash={flash}>
       <Lamps cy={b.y + 56} r={9.5} lamps={bitLamps(out, lampXs(8, lx, 28, 8), "red")} />
       <Readout x={lx} y={b.y + 90}>
         {byte(out)}
@@ -459,15 +539,17 @@ function Output({ ctx, out }) {
   );
 }
 
-function Controller({ ctx, sim, d }) {
+// tick: a count of clock pulses, which blink the CLK lamp. HALT breathes while halted.
+function Controller({ ctx, sim, d, tick }) {
   const b = B.ctrl;
   const cy = b.y + 56;
   const ts = [1, 2, 3, 4, 5, 6].map((t, i) => ({ x: b.x + 26 + i * 30, on: !sim.halted && sim.t === t, color: "white", label: `T${t}` }));
   const status = [
     { label: "RUN", on: !sim.prog && !sim.halted },
-    { label: "HALT", on: sim.halted },
+    { label: "HALT", on: sim.halted, breathe: true },
     { label: "PROG", on: sim.prog },
   ].map((s, i) => ({ ...s, x: b.x + 228 + i * 44, color: "white" }));
+  const clockLevel = !sim.prog && !sim.halted && sim.cycles % 2 === 1;
   const state = sim.prog
     ? "PROG · CLOCK STOPPED"
     : sim.halted
@@ -475,6 +557,10 @@ function Controller({ ctx, sim, d }) {
       : `T${sim.t} · ${sim.t <= 3 ? "FETCH" : `EXECUTE ${d.op}`}`;
   return (
     <Section id="ctrl" ctx={ctx} title="CONTROLLER" sub="RING COUNTER · STATUS">
+      <ClockLamp x={b.x + 18} cy={b.y + 18} tick={tick} level={clockLevel} />
+      <Silk x={b.x + 29} y={b.y + 21} size={8.5} spacing={1} anchor="start" fill={P.soft}>
+        CLK
+      </Silk>
       <Lamps cy={cy} lamps={[...ts, ...status]} />
       {[...ts, ...status].map((l) => (
         <Silk key={l.label} x={l.x} y={b.y + 77} size={8.5} spacing={1} fill={l.on ? P.led.white.on : P.soft}>
@@ -489,14 +575,15 @@ function Controller({ ctx, sim, d }) {
   );
 }
 
-function ControlWord({ ctx, d }) {
+// tick: a count of clock pulses; the lamps lit for the new T state flare once on each.
+function ControlWord({ ctx, d, tick }) {
   const b = B.con;
   const cy = b.y + 42;
   const xs = CON_ORDER.map((_, i) => b.x + 124 + i * 46);
   const red = P.led.red;
   return (
     <Section id="con" ctx={ctx} title="CON" sub="CONTROL WORD" tx={b.x + 52} ty={b.y + 34}>
-      <Lamps cy={cy} lamps={CON_ORDER.map((k, i) => ({ x: xs[i], on: d.sig.has(k), color: "red" }))} />
+      <Lamps cy={cy} lamps={CON_ORDER.map((k, i) => ({ x: xs[i], on: d.sig.has(k), color: "red", pulse: tick }))} />
       {CON_ORDER.map((k, i) => (
         <g key={k}>
           <text x={xs[i]} y={b.y + 24} fontSize={11.5} fontFamily={FONT} textAnchor="middle" fill={d.sig.has(k) ? red.on : SILK}>
@@ -557,8 +644,8 @@ const CONTROL_CSS = `
 .gp-ctl[aria-disabled="true"] { cursor: default; }
 .gp-ctl .gp-focus { opacity: 0; }
 .gp-ctl:focus-visible .gp-focus { opacity: 1; }
-.gp-lever { transform-origin: 0 0; transition: transform 140ms cubic-bezier(0.3, 0.7, 0.4, 1); }
-.gp-fade { transition: opacity 140ms; }
+.gp-lever { transform-origin: 0 0; transition: transform 170ms cubic-bezier(0.34, 1.3, 0.5, 1); }
+.gp-fade { transition: opacity 120ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .gp-lever, .gp-fade { transition: none; } }
 `;
 
@@ -1016,6 +1103,86 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
   );
 }
 
+// --- motion ---------------------------------------------------------------------------------
+//
+// CSS only. Lamps fade with transitions; one-shot effects (a register's flash, the bus sweep, the
+// CLK blink, the CON flare) are elements keyed by a change count, so React remounts them on each
+// change and their animation starts over. Durations are custom properties set from the clock
+// period on the panel, so each effect ends before the next tick even at FAST. Reduced motion keeps
+// the instant color changes and drops the rest.
+const PANEL_CSS = `
+.gp-led { transition: opacity var(--gp-led, 80ms) ease-out, visibility var(--gp-led, 80ms); }
+.gp-led.gp-warm { transition-duration: var(--gp-warm-off, 150ms); }
+.gp-led.gp-warm.gp-on { transition-duration: var(--gp-warm-on, 110ms); }
+.gp-flash { pointer-events: none; animation: gp-fade-out var(--gp-flash, 300ms) ease-out forwards; }
+.gp-blink { animation: gp-fade-out var(--gp-blink, 200ms) ease-in forwards; }
+.gp-pulse { transform-box: fill-box; transform-origin: center; animation: gp-pulse var(--gp-pulse, 260ms) ease-out forwards; }
+.gp-sweep { pointer-events: none; animation: gp-sweep var(--gp-sweep, 420ms) cubic-bezier(0.45, 0, 0.55, 1) forwards; }
+.gp-breathe { animation: gp-breathe 2.8s ease-in-out infinite; }
+.gp-rm { display: none; }
+@keyframes gp-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gp-pulse { from { opacity: 0.85; transform: scale(1.35); } to { opacity: 0; transform: scale(1); } }
+@keyframes gp-sweep {
+  from { opacity: 0; transform: translateX(0); }
+  20%, 75% { opacity: 1; }
+  to { opacity: 0; transform: translateX(var(--gp-dx, 0px)); }
+}
+@keyframes gp-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.38; } }
+@media (prefers-reduced-motion: reduce) {
+  .gp-led { transition: none; }
+  .gp-flash, .gp-blink, .gp-pulse, .gp-sweep { display: none; }
+  .gp-breathe { animation: none; }
+  .gp-rm { display: inline; }
+}
+`;
+
+// What the panel shows that can change: a clock pulse (`tick`, counted only when the count of T
+// states goes up, so CLEAR is not one) and each register's value as displayed.
+const shown = (sim, d) => ({
+  tick: sim.cycles,
+  pc: sim.pc,
+  mar: d.ramAddr,
+  ram: `${d.ramAddr}:${sim.ram[d.ramAddr]}`,
+  ir: sim.ir,
+  a: sim.a,
+  b: sim.b,
+  out: sim.out,
+});
+const NO_CHANGES = { tick: 0, pc: 0, mar: 0, ram: 0, ir: 0, a: 0, b: 0, out: 0 };
+
+// How many times each of those has changed since the panel mounted, from the last sim seen (kept
+// in a ref). The counts key the one-shot effects. Comparing by sim identity keeps it idempotent
+// when React renders twice, and it adds no state, so no extra renders.
+function useChangeCounts(sim, d) {
+  const seen = useRef(null);
+  const s = seen.current;
+  if (!s) {
+    seen.current = { sim, vals: shown(sim, d), counts: NO_CHANGES };
+  } else if (s.sim !== sim) {
+    const vals = shown(sim, d);
+    const counts = { ...s.counts };
+    for (const k of Object.keys(vals)) {
+      if (k === "tick" ? vals.tick > s.vals.tick : vals[k] !== s.vals[k]) counts[k] += 1;
+    }
+    seen.current = { sim, vals, counts };
+  }
+  return seen.current.counts;
+}
+
+// The effect durations for a clock period of `ms`, as custom properties.
+function motionVars(ms) {
+  const t = (f, max) => `${Math.round(Math.min(max, ms * f))}ms`;
+  return {
+    "--gp-led": t(0.5, 80),
+    "--gp-warm-on": t(0.5, 110),
+    "--gp-warm-off": t(0.6, 150),
+    "--gp-flash": t(0.6, 300),
+    "--gp-blink": t(0.55, 200),
+    "--gp-pulse": t(0.6, 260),
+    "--gp-sweep": t(0.7, 420),
+  };
+}
+
 // --- panel ----------------------------------------------------------------------------------
 
 // sim / setSim: the simulator state and its setter. d: derive(sim). running / setRunning: the
@@ -1031,6 +1198,7 @@ export default function GamePanel({
   setRunning,
   rate,
   setRate,
+  stepMs,
   onOpen,
   focusId,
   onEnter,
@@ -1039,12 +1207,16 @@ export default function GamePanel({
 }) {
   const ctx = { d, focusId, onEnter, onLeave, onActivate, onOpen };
   const word = sim.ram[d.ramAddr];
+  const n = useChangeCounts(sim, d);
+  // Free-running, effects must end before the next tick; stepped by hand they can take longer.
+  const period = running ? stepMs ?? 550 : Math.max(stepMs ?? 550, 550);
   return (
-    <g fontFamily={FONT}>
+    <g fontFamily={FONT} style={motionVars(period)}>
+      <style>{PANEL_CSS}</style>
       <Defs />
       <Case />
 
-      <Register id="pc" ctx={ctx} title="PC" sub="PROGRAM COUNTER" value={sim.pc} bits={4} color="amber" />
+      <Register id="pc" ctx={ctx} title="PC" sub="PROGRAM COUNTER" value={sim.pc} bits={4} color="amber" flash={n.pc} />
       <Register
         id="mar"
         ctx={ctx}
@@ -1053,24 +1225,25 @@ export default function GamePanel({
         value={d.ramAddr}
         bits={4}
         color="amber"
+        flash={n.mar}
       />
-      <Section id="ram" ctx={ctx} title="RAM" sub={`16 × 8 · WORD ${hex(d.ramAddr, 1)}H`}>
+      <Section id="ram" ctx={ctx} title="RAM" sub={`16 × 8 · WORD ${hex(d.ramAddr, 1)}H`} flash={n.ram}>
         <Lamps cy={B.ram.y + LAMP_Y} lamps={bitLamps(word, lampXs(8, mid("ram"), 18, 6), "green")} />
         <Readout x={mid("ram")} y={B.ram.y + READ_Y}>
           {`[${hex(d.ramAddr, 1)}H] ${byte(word)}`}
         </Readout>
       </Section>
-      <InstructionRegister ctx={ctx} ir={sim.ir} />
+      <InstructionRegister ctx={ctx} ir={sim.ir} flash={n.ir} />
 
-      <Register id="a" ctx={ctx} title="A" sub="ACCUMULATOR" value={sim.a} bits={8} color="green" />
+      <Register id="a" ctx={ctx} title="A" sub="ACCUMULATOR" value={sim.a} bits={8} color="green" flash={n.a} />
       <Register id="alu" ctx={ctx} title="ALU" sub="ADDER-SUBTRACTER" value={d.alu} bits={8} color="green" />
       <AluBadge d={d} />
-      <Register id="b" ctx={ctx} title="B" sub="B REGISTER" value={sim.b} bits={8} color="green" />
-      <Bus ctx={ctx} d={d} />
+      <Register id="b" ctx={ctx} title="B" sub="B REGISTER" value={sim.b} bits={8} color="green" flash={n.b} />
+      <Bus ctx={ctx} d={d} tick={n.tick} />
 
-      <Output ctx={ctx} out={sim.out} />
-      <Controller ctx={ctx} sim={sim} d={d} />
-      <ControlWord ctx={ctx} d={d} />
+      <Output ctx={ctx} out={sim.out} flash={n.out} />
+      <Controller ctx={ctx} sim={sim} d={d} tick={n.tick} />
+      <ControlWord ctx={ctx} d={d} tick={n.tick} />
 
       <Controls sim={sim} setSim={setSim} running={running} setRunning={setRunning} rate={rate} setRate={setRate} />
     </g>
