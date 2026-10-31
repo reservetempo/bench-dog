@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { CANVAS, ROOT, nodeAt, cleanPath } from "./sap1Parts";
 import { CON_ORDER, SIG, LISTING, bin, hex, derive, describe, initialState, step } from "./sap1Sim";
+import { TEXTBOOK, cssVars } from "./theme";
 
-const INK = "#111111";
-const MUTED = "#6b7280";
-const FRAME = "#9ca3af";
-const RED = "#e00000";
-const RED_TINT = "#fff0f0";
-const HOVER = "#f4f4f5";
+// The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
+// matching CSS variables (--sap-*) set on the page root.
+const PaletteContext = createContext(TEXTBOOK);
+const usePalette = () => useContext(PaletteContext);
+
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const FULL = [0, 0, CANVAS.w, CANVAS.h];
 const STEP_MS = 550;
@@ -131,8 +131,9 @@ function bitsMarker(pts, at) {
 }
 
 function Wire({ w, d }) {
+  const P = usePalette();
   const on = Boolean(w.on && d.sig.has(w.on));
-  const color = on ? RED : INK;
+  const color = on ? P.accent : P.ink;
   const m = w.bits ? bitsMarker(w.pts, w.bitsAt) : null;
   return (
     <g>
@@ -159,7 +160,7 @@ function Wire({ w, d }) {
             y={m.h ? m.y + 19 : m.y + 4}
             textAnchor={m.h ? "middle" : "start"}
             fontSize={11}
-            fill={on ? RED : MUTED}
+            fill={on ? P.accent : P.muted}
           >
             {w.bits}
           </text>
@@ -167,7 +168,7 @@ function Wire({ w, d }) {
       )}
       {w.dots?.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={3.5} fill={color} />)}
       {w.label && (
-        <text x={w.labelAt[0]} y={w.labelAt[1]} textAnchor={w.anchor ?? "middle"} fontSize={12} fill={on ? RED : MUTED}>
+        <text x={w.labelAt[0]} y={w.labelAt[1]} textAnchor={w.anchor ?? "middle"} fontSize={12} fill={on ? P.accent : P.muted}>
           <SvgText text={w.label} />
         </text>
       )}
@@ -176,8 +177,9 @@ function Wire({ w, d }) {
 }
 
 function Pin({ p, d }) {
+  const P = usePalette();
   const on = CON_ORDER.includes(p.sig) && d.sig.has(p.sig);
-  const color = on ? RED : INK;
+  const color = on ? P.accent : P.ink;
   const len = p.len ?? 30;
   const [x, y] = p.at;
   let [x2, y2, lx, ly, anchor] = [x, y, x, y, "middle"];
@@ -196,6 +198,7 @@ function Pin({ p, d }) {
 }
 
 function Group({ g, sim, d }) {
+  const P = usePalette();
   const active = g.act?.some((k) => d.sig.has(k));
   const value = g.value?.(sim, d);
   return (
@@ -207,15 +210,15 @@ function Group({ g, sim, d }) {
         height={g.h}
         rx={6}
         fill="none"
-        stroke={active ? RED : FRAME}
+        stroke={active ? P.accent : P.frame}
         strokeWidth={active ? 2 : 1.2}
         strokeDasharray="5 4"
       />
-      <text x={g.x + 10} y={g.y + 19} fontSize={11} letterSpacing={0.6} fill={MUTED}>
+      <text x={g.x + 10} y={g.y + 19} fontSize={11} letterSpacing={0.6} fill={P.muted}>
         {g.label.toUpperCase()}
       </text>
       {value && (
-        <text x={g.x + g.w - 10} y={g.y + 19} textAnchor="end" fontSize={12.5} fontFamily={MONO} fill={active ? RED : INK}>
+        <text x={g.x + g.w - 10} y={g.y + 19} textAnchor="end" fontSize={12.5} fontFamily={MONO} fill={active ? P.accent : P.ink}>
           {value}
         </text>
       )}
@@ -224,6 +227,7 @@ function Group({ g, sim, d }) {
 }
 
 function Leds({ cx, cy, value }) {
+  const P = usePalette();
   return Array.from({ length: 8 }, (_, i) => {
     const lit = (value >> (7 - i)) & 1;
     return (
@@ -232,8 +236,8 @@ function Leds({ cx, cy, value }) {
         cx={cx - 77 + i * 22}
         cy={cy}
         r={7}
-        fill={lit ? RED : "#fff"}
-        stroke={lit ? RED : FRAME}
+        fill={lit ? P.accent : P.ledOff}
+        stroke={lit ? P.accent : P.frame}
         strokeWidth={1.5}
       />
     );
@@ -241,6 +245,7 @@ function Leds({ cx, cy, value }) {
 }
 
 function ConRow({ b, d }) {
+  const P = usePalette();
   const cell = b.w / CON_ORDER.length;
   const mid = b.y + b.h / 2 + 5;
   return (
@@ -249,17 +254,25 @@ function ConRow({ b, d }) {
         const on = d.sig.has(k);
         return (
           <g key={k}>
-            <rect x={b.x + i * cell} y={b.y} width={cell} height={b.h} fill={on ? RED : "#fff"} stroke={INK} strokeWidth={1.2} />
-            <text x={b.x + (i + 0.5) * cell} y={mid - 2} textAnchor="middle" fontSize={13} fill={on ? "#fff" : INK}>
+            <rect
+              x={b.x + i * cell}
+              y={b.y}
+              width={cell}
+              height={b.h}
+              fill={on ? P.accent : P.block}
+              stroke={P.ink}
+              strokeWidth={1.2}
+            />
+            <text x={b.x + (i + 0.5) * cell} y={mid - 2} textAnchor="middle" fontSize={13} fill={on ? P.onAccent : P.ink}>
               <SvgText text={`{${k}}`} />
             </text>
           </g>
         );
       })}
-      <text x={b.x - 8} y={mid} textAnchor="end" fontSize={13} fontWeight={700} fill={INK}>
+      <text x={b.x - 8} y={mid} textAnchor="end" fontSize={13} fontWeight={700} fill={P.ink}>
         CON
       </text>
-      <text x={b.x + b.w + 8} y={mid} fontSize={13} fontFamily={MONO} fill={INK}>
+      <text x={b.x + b.w + 8} y={mid} fontSize={13} fontFamily={MONO} fill={P.ink}>
         {hex(d.con, 3)}H
       </text>
     </g>
@@ -267,6 +280,7 @@ function ConRow({ b, d }) {
 }
 
 function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
+  const P = usePalette();
   const active = b.kind === "bus" ? d.bus !== null : Boolean(b.act?.some((k) => d.sig.has(k)));
   const name = [b.tag, b.title].filter(Boolean).join(" ");
   const handlers = {
@@ -291,7 +305,7 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
     return (
       <g {...handlers}>
         <ConRow b={b} d={d} />
-        {focused && <rect x={b.x - 3} y={b.y - 3} width={b.w + 6} height={b.h + 6} fill="none" stroke={INK} strokeWidth={2} />}
+        {focused && <rect x={b.x - 3} y={b.y - 3} width={b.w + 6} height={b.h + 6} fill="none" stroke={P.ink} strokeWidth={2} />}
       </g>
     );
   }
@@ -306,11 +320,11 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
           y={b.y}
           width={b.w}
           height={b.h}
-          fill={active ? RED_TINT : focused ? "#e4e4e7" : HOVER}
-          stroke={active ? RED : INK}
+          fill={active ? P.accentTint : focused ? P.hoverStrong : P.hover}
+          stroke={active ? P.accent : P.ink}
           strokeWidth={active || focused ? 2.5 : 1.5}
         />
-        <text x={cx} y={b.y - 8} textAnchor="middle" fontSize={13} fontWeight={700} fill={INK}>
+        <text x={cx} y={b.y - 8} textAnchor="middle" fontSize={13} fontWeight={700} fill={P.ink}>
           {b.title}
         </text>
         <text
@@ -320,7 +334,7 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
           textAnchor="middle"
           fontSize={13}
           fontFamily={MONO}
-          fill={active ? RED : MUTED}
+          fill={active ? P.accent : P.muted}
         >
           {d.bus === null ? "not driven" : bin(d.bus, d.busBits)}
         </text>
@@ -329,9 +343,9 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
   }
 
   const value = b.value?.(sim, d);
-  const lines = [{ text: b.title, size: 15, weight: 700, fill: INK }];
-  if (b.sub) lines.push({ text: b.sub, size: 12, fill: MUTED });
-  if (value != null) lines.push({ text: value, size: 13, mono: true, fill: active ? RED : INK });
+  const lines = [{ text: b.title, size: 15, weight: 700, fill: P.ink }];
+  if (b.sub) lines.push({ text: b.sub, size: 12, fill: P.muted });
+  if (value != null) lines.push({ text: value, size: 13, mono: true, fill: active ? P.accent : P.ink });
   if (b.kind === "display") lines.push({ leds: true, size: 16 });
   const gap = 6;
   const total = lines.reduce((sum, l) => sum + l.size, 0) + gap * (lines.length - 1);
@@ -346,21 +360,21 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
         width={b.w}
         height={b.h}
         rx={b.kind === "switch" ? 12 : 3}
-        fill={active ? RED_TINT : focused ? HOVER : b.kind === "switch" ? "#fafafa" : "#fff"}
-        stroke={active ? RED : INK}
+        fill={active ? P.accentTint : focused ? P.hover : b.kind === "switch" ? P.blockAlt : P.block}
+        stroke={active ? P.accent : P.ink}
         strokeWidth={active || focused ? 2.5 : 1.5}
       />
       {b.tag && (
-        <text x={b.x + 8} y={b.y + 15} fontSize={11} fill={MUTED}>
+        <text x={b.x + 8} y={b.y + 15} fontSize={11} fill={P.muted}>
           {b.tag}
         </text>
       )}
       {drill && (
         <g>
-          <circle cx={b.x + b.w - 14} cy={b.y + 14} r={8} fill={focused ? INK : "#fff"} stroke={INK} strokeWidth={1.3} />
+          <circle cx={b.x + b.w - 14} cy={b.y + 14} r={8} fill={focused ? P.ink : P.block} stroke={P.ink} strokeWidth={1.3} />
           <path
             d={`M${b.x + b.w - 18} ${b.y + 14}h8M${b.x + b.w - 14} ${b.y + 10}v8`}
-            stroke={focused ? "#fff" : INK}
+            stroke={focused ? P.block : P.ink}
             strokeWidth={1.5}
           />
         </g>
@@ -389,6 +403,7 @@ function Block({ b, sim, d, drill, focused, onEnter, onLeave, onActivate }) {
 }
 
 function Diagram({ node, sim, d, focusId, onEnter, onLeave, onActivate }) {
+  const P = usePalette();
   const dg = node.diagram;
   return (
     <>
@@ -396,7 +411,7 @@ function Diagram({ node, sim, d, focusId, onEnter, onLeave, onActivate }) {
       {dg.wires?.map((w, i) => <Wire key={`w${i}`} w={w} d={d} />)}
       {dg.pins?.map((p, i) => <Pin key={`p${i}`} p={p} d={d} />)}
       {dg.notes?.map((n, i) => (
-        <text key={`n${i}`} x={n.at[0]} y={n.at[1]} textAnchor={n.anchor ?? "middle"} fontSize={11.5} fill={MUTED}>
+        <text key={`n${i}`} x={n.at[0]} y={n.at[1]} textAnchor={n.anchor ?? "middle"} fontSize={11.5} fill={P.muted}>
           <SvgText text={n.text} />
         </text>
       ))}
@@ -419,20 +434,31 @@ function Diagram({ node, sim, d, focusId, onEnter, onLeave, onActivate }) {
 
 // --- side panel -----------------------------------------------------------------------------
 
+// HTML colors come from the --sap-* variables (see cssVars in theme.js).
+const BTN =
+  "border border-[color:var(--sap-ink)] px-3 py-1 text-sm hover:bg-[color:var(--sap-ink)] hover:text-[color:var(--sap-bg)]";
+const BTN_DISABLED =
+  "disabled:border-[color:var(--sap-disabled)] disabled:text-[color:var(--sap-disabled)] disabled:hover:bg-transparent";
+
 function Memory({ sim, d }) {
   const reading = d.sig.has("CE");
   return (
-    <section className="mt-6 border-t border-gray-200 pt-4">
-      <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Memory</h3>
-      <p className="mt-1 text-sm text-gray-600">Example 10-1 from the book: 1 + 2 + 3 − 4.</p>
+    <section className="mt-6 border-t border-[color:var(--sap-rule)] pt-4">
+      <h3 className="text-xs font-bold uppercase tracking-wide text-[color:var(--sap-muted)]">Memory</h3>
+      <p className="mt-1 text-sm text-[color:var(--sap-soft)]">Example 10-1 from the book: 1 + 2 + 3 − 4.</p>
       <table className="mt-2 w-full font-mono text-[13px]">
         <tbody>
           {sim.ram.map((v, i) => (
-            <tr key={i} className={reading && sim.mar === i ? "bg-[#fff0f0] text-[#e00000]" : ""}>
-              <td className="py-0.5 pl-1 pr-3 text-gray-500">{hex(i, 1)}H</td>
+            <tr
+              key={i}
+              className={
+                reading && sim.mar === i ? "bg-[color:var(--sap-accent-tint)] text-[color:var(--sap-accent)]" : ""
+              }
+            >
+              <td className="py-0.5 pl-1 pr-3 text-[color:var(--sap-muted)]">{hex(i, 1)}H</td>
               <td className="pr-3">{bin(v)}</td>
               <td className="pr-2">{LISTING[i]}</td>
-              <td className="pr-1 text-right text-[11px] text-gray-500">
+              <td className="pr-1 text-right text-[11px] text-[color:var(--sap-muted)]">
                 {[sim.pc === i && "PC", sim.mar === i && "MAR"].filter(Boolean).join(" ")}
               </td>
             </tr>
@@ -446,7 +472,7 @@ function Memory({ sim, d }) {
 function Panel({ node, path, focus, drill, sim, d, onOpen }) {
   return (
     <aside className="text-[15px] leading-relaxed">
-      <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{node.part}</p>
+      <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--sap-muted)]">{node.part}</p>
       <h2 className="text-2xl font-bold">{node.title}</h2>
       {node.about.map((p, i) => (
         <p key={i} className="mt-2">
@@ -454,25 +480,25 @@ function Panel({ node, path, focus, drill, sim, d, onOpen }) {
         </p>
       ))}
 
-      <section className="mt-6 min-h-[150px] border-t border-gray-200 pt-4">
+      <section className="mt-6 min-h-[150px] border-t border-[color:var(--sap-rule)] pt-4">
         {focus ? (
           <>
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{focus.tag ?? "Part"}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--sap-muted)]">{focus.tag ?? "Part"}</p>
             <h3 className="text-lg font-bold">
               {focus.title}
-              {focus.sub && <span className="font-normal text-gray-500"> · {focus.sub}</span>}
+              {focus.sub && <span className="font-normal text-[color:var(--sap-muted)]"> · {focus.sub}</span>}
             </h3>
             <p className="mt-1">
               <HtmlText text={focus.about ?? ""} />
             </p>
             {drill && (
-              <button onClick={() => onOpen(focus.id)} className="mt-3 border border-black px-3 py-1 text-sm hover:bg-black hover:text-white">
+              <button onClick={() => onOpen(focus.id)} className={`mt-3 ${BTN}`}>
                 Look inside →
               </button>
             )}
           </>
         ) : (
-          <p className="text-gray-500">Hover over a part, or tap it, to see what it does. Parts marked + open up.</p>
+          <p className="text-[color:var(--sap-muted)]">Hover over a part, or tap it, to see what it does. Parts marked + open up.</p>
         )}
       </section>
 
@@ -484,6 +510,7 @@ function Panel({ node, path, focus, drill, sim, d, onOpen }) {
 // --- main -----------------------------------------------------------------------------------
 
 export default function Sap1Visualizer() {
+  const pal = TEXTBOOK;
   const [path, setPath] = useState([]);
   const [sim, setSim] = useState(initialState);
   const [running, setRunning] = useState(false);
@@ -586,6 +613,17 @@ export default function Sap1Visualizer() {
     if (sim.halted) setRunning(false);
   }, [sim.halted]);
 
+  // Paint the whole page (overscroll included) in the palette while this route is open.
+  useEffect(() => {
+    const s = document.documentElement.style;
+    const prev = [s.backgroundColor, s.colorScheme];
+    s.backgroundColor = pal.bg;
+    s.colorScheme = pal.scheme;
+    return () => {
+      [s.backgroundColor, s.colorScheme] = prev;
+    };
+  }, [pal]);
+
   const onEnter = useCallback((id) => setHoverId(id), []);
   const onLeave = useCallback((id) => setHoverId((h) => (h === id ? null : h)), []);
   const onActivate = useCallback(
@@ -603,140 +641,151 @@ export default function Sap1Visualizer() {
     path.map((_, i) => ({ title: nodeAt(path.slice(0, i + 1)).title, path: path.slice(0, i + 1) }))
   );
 
-  const btn =
-    "border border-black px-3 py-1 text-sm hover:bg-black hover:text-white disabled:border-gray-300 disabled:text-gray-300 disabled:hover:bg-transparent";
+  const btn = `${BTN} ${BTN_DISABLED}`;
 
   return (
-    <div className="min-h-screen bg-white font-sans text-black">
-      <main className="mx-auto max-w-6xl px-4 py-10">
-        <a href="/" className="text-sm text-gray-500 hover:underline">
-          ← home
-        </a>
-        <h1 className="mt-2 text-4xl font-bold">sap-1</h1>
-        <p className="mt-2 max-w-2xl text-gray-600">
-          The Simple-As-Possible computer from Malvino &amp; Brown&apos;s <i>Digital Computer Electronics</i>, chapter 10.
-          Click a part marked + to look inside it, and step the clock to watch the example program run.
-        </p>
+    <PaletteContext.Provider value={pal}>
+      <div
+        className="min-h-screen bg-[color:var(--sap-bg)] font-sans text-[color:var(--sap-ink)]"
+        style={{ ...cssVars(pal), colorScheme: pal.scheme }}
+      >
+        <main className="mx-auto max-w-6xl px-4 py-10">
+          <a href="/" className="text-sm text-[color:var(--sap-muted)] hover:underline">
+            ← home
+          </a>
+          <h1 className="mt-2 text-4xl font-bold">sap-1</h1>
+          <p className="mt-2 max-w-2xl text-[color:var(--sap-soft)]">
+            The Simple-As-Possible computer from Malvino &amp; Brown&apos;s <i>Digital Computer Electronics</i>, chapter 10.
+            Click a part marked + to look inside it, and step the clock to watch the example program run.
+          </p>
 
-        <nav aria-label="Breadcrumb" className="mt-6 flex flex-wrap items-center gap-x-2 text-sm">
-          {crumbs.map((c, i) => (
-            <span key={c.path.join("/") || "root"} className="flex items-center gap-x-2">
-              {i > 0 && <span className="text-gray-400">/</span>}
-              {i === crumbs.length - 1 ? (
-                <span className="font-bold">{c.title}</span>
-              ) : (
-                <button onClick={() => navigate(c.path)} className="text-gray-600 underline-offset-2 hover:underline">
-                  {c.title}
-                </button>
-              )}
-            </span>
-          ))}
-        </nav>
-
-        <div className="mt-3 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border border-b-0 border-black px-3 py-2">
-              <div className="flex gap-1.5">
-                <button
-                  className={btn}
-                  onClick={() => {
-                    setRunning(false);
-                    setSim(initialState());
-                  }}
-                >
-                  Reset
-                </button>
-                <button className={btn} disabled={sim.halted} onClick={() => setSim((s) => step(s))}>
-                  Step
-                </button>
-                <button className={`${btn} w-[4.5rem]`} disabled={sim.halted} onClick={() => setRunning((r) => !r)}>
-                  {running ? "Pause" : "Run"}
-                </button>
-              </div>
-              <div className="flex gap-1 font-mono text-[13px]" aria-label="T state">
-                {[1, 2, 3, 4, 5, 6].map((t) => (
-                  <span
-                    key={t}
-                    className={`px-1.5 py-0.5 ${
-                      !sim.halted && sim.t === t ? "bg-[#e00000] text-white" : t <= 3 ? "text-gray-500" : "text-gray-400"
-                    }`}
+          <nav aria-label="Breadcrumb" className="mt-6 flex flex-wrap items-center gap-x-2 text-sm">
+            {crumbs.map((c, i) => (
+              <span key={c.path.join("/") || "root"} className="flex items-center gap-x-2">
+                {i > 0 && <span className="text-[color:var(--sap-faint)]">/</span>}
+                {i === crumbs.length - 1 ? (
+                  <span className="font-bold">{c.title}</span>
+                ) : (
+                  <button
+                    onClick={() => navigate(c.path)}
+                    className="text-[color:var(--sap-soft)] underline-offset-2 hover:underline"
                   >
-                    T{t}
-                  </span>
-                ))}
-              </div>
-              <div className="font-mono text-[13px]">
-                CON <span className="font-bold">{hex(d.con, 3)}H</span>
-              </div>
-              <div className="font-mono text-[13px]">
-                OUT <span className="font-bold">{bin(sim.out)}</span> = {sim.out}
-              </div>
-            </div>
+                    {c.title}
+                  </button>
+                )}
+              </span>
+            ))}
+          </nav>
 
-            <div className="overflow-x-auto border border-black">
-              <svg
-                ref={svgRef}
-                viewBox={FULL.join(" ")}
-                className="block h-auto w-full min-w-[680px] select-none"
-                role="img"
-                aria-label={`${node.title} diagram`}
-              >
-                <defs>
-                  {[
-                    ["off", INK],
-                    ["on", RED],
-                  ].map(([id, color]) => (
-                    <marker
-                      key={id}
-                      id={`sap1-arrow-${id}`}
-                      viewBox="0 0 10 10"
-                      refX={9}
-                      refY={5}
-                      markerWidth={9}
-                      markerHeight={9}
-                      markerUnits="userSpaceOnUse"
-                      orient="auto-start-reverse"
+          <div className="mt-3 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border border-b-0 border-[color:var(--sap-frame)] px-3 py-2">
+                <div className="flex gap-1.5">
+                  <button
+                    className={btn}
+                    onClick={() => {
+                      setRunning(false);
+                      setSim(initialState());
+                    }}
+                  >
+                    Reset
+                  </button>
+                  <button className={btn} disabled={sim.halted} onClick={() => setSim((s) => step(s))}>
+                    Step
+                  </button>
+                  <button className={`${btn} w-[4.5rem]`} disabled={sim.halted} onClick={() => setRunning((r) => !r)}>
+                    {running ? "Pause" : "Run"}
+                  </button>
+                </div>
+                <div className="flex gap-1 font-mono text-[13px]" aria-label="T state">
+                  {[1, 2, 3, 4, 5, 6].map((t) => (
+                    <span
+                      key={t}
+                      className={`px-1.5 py-0.5 ${
+                        !sim.halted && sim.t === t
+                          ? "bg-[color:var(--sap-accent)] text-[color:var(--sap-on-accent)]"
+                          : t <= 3
+                            ? "text-[color:var(--sap-muted)]"
+                            : "text-[color:var(--sap-faint)]"
+                      }`}
                     >
-                      <path d="M0,1 L10,5 L0,9 z" fill={color} />
-                    </marker>
+                      T{t}
+                    </span>
                   ))}
-                </defs>
-                <g ref={sceneRef}>
-                  <Diagram
-                    node={node}
-                    sim={sim}
-                    d={d}
-                    focusId={focusId}
-                    onEnter={onEnter}
-                    onLeave={onLeave}
-                    onActivate={onActivate}
-                  />
-                </g>
-              </svg>
+                </div>
+                <div className="font-mono text-[13px]">
+                  CON <span className="font-bold">{hex(d.con, 3)}H</span>
+                </div>
+                <div className="font-mono text-[13px]">
+                  OUT <span className="font-bold">{bin(sim.out)}</span> = {sim.out}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border border-[color:var(--sap-frame)]">
+                <svg
+                  ref={svgRef}
+                  viewBox={FULL.join(" ")}
+                  className="block h-auto w-full min-w-[680px] select-none"
+                  role="img"
+                  aria-label={`${node.title} diagram`}
+                >
+                  <defs>
+                    {[
+                      ["off", pal.ink],
+                      ["on", pal.accent],
+                    ].map(([id, color]) => (
+                      <marker
+                        key={id}
+                        id={`sap1-arrow-${id}`}
+                        viewBox="0 0 10 10"
+                        refX={9}
+                        refY={5}
+                        markerWidth={9}
+                        markerHeight={9}
+                        markerUnits="userSpaceOnUse"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M0,1 L10,5 L0,9 z" fill={color} />
+                      </marker>
+                    ))}
+                  </defs>
+                  <g ref={sceneRef}>
+                    <Diagram
+                      node={node}
+                      sim={sim}
+                      d={d}
+                      focusId={focusId}
+                      onEnter={onEnter}
+                      onLeave={onLeave}
+                      onActivate={onActivate}
+                    />
+                  </g>
+                </svg>
+              </div>
+
+              <p className="border border-t-0 border-[color:var(--sap-frame)] px-3 py-2 text-sm" aria-live="polite">
+                <span className="font-bold">
+                  {sim.halted ? "Halted" : `T${sim.t} · ${sim.t <= 3 ? "fetch" : `execute ${d.op}`}`}
+                </span>{" "}
+                — {describe(sim)}
+              </p>
+              <p className="mt-2 text-xs text-[color:var(--sap-muted)]">
+                Red marks what is active in this T state. Esc or the breadcrumbs go back up a level.
+              </p>
             </div>
 
-            <p className="border border-t-0 border-black px-3 py-2 text-sm" aria-live="polite">
-              <span className="font-bold">
-                {sim.halted ? "Halted" : `T${sim.t} · ${sim.t <= 3 ? "fetch" : `execute ${d.op}`}`}
-              </span>{" "}
-              — {describe(sim)}
-            </p>
-            <p className="mt-2 text-xs text-gray-500">
-              Red marks what is active in this T state. Esc or the breadcrumbs go back up a level.
-            </p>
+            <Panel
+              node={node}
+              path={path}
+              focus={focus}
+              drill={Boolean(focus && node.children?.[focus.id])}
+              sim={sim}
+              d={d}
+              onOpen={(id) => navigate([...path, id])}
+            />
           </div>
-
-          <Panel
-            node={node}
-            path={path}
-            focus={focus}
-            drill={Boolean(focus && node.children?.[focus.id])}
-            sim={sim}
-            d={d}
-            onOpen={(id) => navigate([...path, id])}
-          />
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </PaletteContext.Provider>
   );
 }
