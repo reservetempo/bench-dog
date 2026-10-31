@@ -354,6 +354,7 @@ function Section({ id, ctx, title, sub, tx, ty, flash = 0, children }) {
   const y = ty ?? b.y + 18;
   return (
     <g
+      data-tour-id={id}
       role="button"
       tabIndex={0}
       aria-label={drill ? `Open ${block.title}` : block.title}
@@ -539,16 +540,30 @@ function Output({ ctx, out, flash }) {
   );
 }
 
+// The ring counter's layout in the CONTROLLER section, from its top left: the CLK lamp's centre,
+// the T1 lamp's x and the step to T2 … T6, the lamp row and the label baseline under it.
+const RING = { clk: 18, t1: 26, step: 30, lampY: 56, labelY: 77 };
+
 // tick: a count of clock pulses, which blink the CLK lamp. HALT breathes while halted.
 function Controller({ ctx, sim, d, tick }) {
   const b = B.ctrl;
-  const cy = b.y + 56;
-  const ts = [1, 2, 3, 4, 5, 6].map((t, i) => ({ x: b.x + 26 + i * 30, on: !sim.halted && sim.t === t, color: "white", label: `T${t}` }));
+  const cy = b.y + RING.lampY;
+  const ts = [1, 2, 3, 4, 5, 6].map((t, i) => ({
+    x: b.x + RING.t1 + i * RING.step,
+    on: !sim.halted && sim.t === t,
+    color: "white",
+    label: `T${t}`,
+  }));
   const status = [
     { label: "RUN", on: !sim.prog && !sim.halted },
     { label: "HALT", on: sim.halted, breathe: true },
     { label: "PROG", on: sim.prog },
   ].map((s, i) => ({ ...s, x: b.x + 228 + i * 44, color: "white" }));
+  const label = (l) => (
+    <Silk key={l.label} x={l.x} y={b.y + RING.labelY} size={8.5} spacing={1} fill={l.on ? P.led.white.on : P.soft}>
+      {l.label}
+    </Silk>
+  );
   const clockLevel = !sim.prog && !sim.halted && sim.cycles % 2 === 1;
   const state = sim.prog
     ? "PROG · CLOCK STOPPED"
@@ -557,16 +572,16 @@ function Controller({ ctx, sim, d, tick }) {
       : `T${sim.t} · ${sim.t <= 3 ? "FETCH" : `EXECUTE ${d.op}`}`;
   return (
     <Section id="ctrl" ctx={ctx} title="CONTROLLER" sub="RING COUNTER · STATUS">
-      <ClockLamp x={b.x + 18} cy={b.y + 18} tick={tick} level={clockLevel} />
-      <Silk x={b.x + 29} y={b.y + 21} size={8.5} spacing={1} anchor="start" fill={P.soft}>
-        CLK
-      </Silk>
-      <Lamps cy={cy} lamps={[...ts, ...status]} />
-      {[...ts, ...status].map((l) => (
-        <Silk key={l.label} x={l.x} y={b.y + 77} size={8.5} spacing={1} fill={l.on ? P.led.white.on : P.soft}>
-          {l.label}
+      <g data-tour-id="ring">
+        <ClockLamp x={b.x + RING.clk} cy={b.y + RING.clk} tick={tick} level={clockLevel} />
+        <Silk x={b.x + RING.clk + 11} y={b.y + RING.clk + 3} size={8.5} spacing={1} anchor="start" fill={P.soft}>
+          CLK
         </Silk>
-      ))}
+        <Lamps cy={cy} lamps={ts} />
+        {ts.map(label)}
+      </g>
+      <Lamps cy={cy} lamps={status} />
+      {status.map(label)}
       <path d={`M${b.x + 200.5} ${b.y + 44}V${b.y + 80}`} stroke={SILK} strokeOpacity={0.3} />
       <Readout x={mid("ctrl")} y={b.y + 93} size={11}>
         {state}
@@ -731,9 +746,10 @@ function HitArea({ x, w }) {
 }
 
 // A two-way toggle (role="switch"). Click, Enter or Space flips it.
-function Toggle({ x, w = 24, on, label, disabled, onFlip, children }) {
+function Toggle({ x, w = 24, on, label, disabled, onFlip, tourId, children }) {
   return (
     <g
+      data-tour-id={tourId}
       role="switch"
       tabIndex={0}
       aria-checked={on}
@@ -777,7 +793,7 @@ function LeverLabels({ x, up, down, isUp }) {
 
 // A momentary lit push button. It lights while held (pointer or Enter / Space) and acts on
 // release; disabled, it is dim and does nothing.
-function PushButton({ x, legend, above, below, color = "white", disabled, label, onPress }) {
+function PushButton({ x, legend, above, below, color = "white", disabled, label, onPress, tourId }) {
   const [down, setDown] = useState(false);
   const downRef = useRef(false);
   const press = (v) => {
@@ -790,6 +806,7 @@ function PushButton({ x, legend, above, below, color = "white", disabled, label,
   const [x0, y0] = [x - w / 2, PIVOT_Y - h / 2];
   return (
     <g
+      data-tour-id={tourId}
       role="button"
       tabIndex={0}
       aria-label={label}
@@ -865,6 +882,7 @@ function RateSwitch({ x, rate, onRate, lamp }) {
   const set = (r) => onRate(Math.max(0, Math.min(RATES.length - 1, r)));
   return (
     <g
+      data-tour-id="sw-rate"
       role="slider"
       tabIndex={0}
       aria-label="Clock rate"
@@ -978,15 +996,9 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
           </Silk>
         ))}
       </g>
-      <GroupHead x0={ADDR_XS[0] - 10} x1={ADDR_XS[3] + 10}>
-        S1 · ADDRESS
-      </GroupHead>
-      <GroupHead x0={DATA_XS[0] - 10} x1={DATA_XS[7] + 10}>
-        S3 · DATA
-      </GroupHead>
-
       {/* S2: RUN / PROG */}
       <Toggle
+        tourId="sw-prog"
         x={X.prog}
         w={34}
         on={sim.prog}
@@ -1001,52 +1013,66 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
       </Toggle>
 
       {/* S1 and S3: address and data switches, MSB on the left */}
-      <Lamps cy={SW_LAMP_Y} r={4.5} lamps={[...addrBits, ...dataBits]} />
-      {ADDR_XS.map((x, k) => {
-        const bit = 3 - k;
-        const on = addrBits[k].on;
-        return (
-          <Toggle
-            key={`a${bit}`}
-            x={x}
-            on={on}
-            label={`Address switch A${bit}, ${on ? "on" : "off"}`}
-            onFlip={() => setSim((s) => toggleAddrBit(s, bit))}
-          >
-            <Silk x={x} y={UP_Y} size={7.5} spacing={0.5} fill={on ? SILK : P.muted}>
-              {`A${bit}`}
-            </Silk>
-          </Toggle>
-        );
-      })}
-      {DATA_XS.map((x, k) => {
-        const bit = 7 - k;
-        const on = dataBits[k].on;
-        return (
-          <Toggle
-            key={`d${bit}`}
-            x={x}
-            on={on}
-            label={`Data switch D${bit}, ${on ? "on" : "off"}`}
-            onFlip={() => setSim((s) => toggleDataBit(s, bit))}
-          >
-            <Silk x={x} y={UP_Y} size={7.5} spacing={0.5} fill={on ? SILK : P.muted}>
-              {`D${bit}`}
-            </Silk>
-          </Toggle>
-        );
-      })}
-      <g pointerEvents="none">
-        <Readout x={(ADDR_XS[0] + ADDR_XS[3]) / 2} y={SW_READ_Y} size={10}>
-          {nibble(sim.addrSw)}
-        </Readout>
-        <Readout x={(DATA_XS[0] + DATA_XS[7]) / 2} y={SW_READ_Y} size={10}>
-          {`${byte(sim.dataSw)} · ${decodeWord(sim.dataSw) ?? "NOP"}`}
-        </Readout>
+      <g data-tour-id="sw-addr">
+        <GroupHead x0={ADDR_XS[0] - 10} x1={ADDR_XS[3] + 10}>
+          S1 · ADDRESS
+        </GroupHead>
+        <Lamps cy={SW_LAMP_Y} r={4.5} lamps={addrBits} />
+        {ADDR_XS.map((x, k) => {
+          const bit = 3 - k;
+          const on = addrBits[k].on;
+          return (
+            <Toggle
+              key={`a${bit}`}
+              x={x}
+              on={on}
+              label={`Address switch A${bit}, ${on ? "on" : "off"}`}
+              onFlip={() => setSim((s) => toggleAddrBit(s, bit))}
+            >
+              <Silk x={x} y={UP_Y} size={7.5} spacing={0.5} fill={on ? SILK : P.muted}>
+                {`A${bit}`}
+              </Silk>
+            </Toggle>
+          );
+        })}
+        <g pointerEvents="none">
+          <Readout x={(ADDR_XS[0] + ADDR_XS[3]) / 2} y={SW_READ_Y} size={10}>
+            {nibble(sim.addrSw)}
+          </Readout>
+        </g>
+      </g>
+      <g data-tour-id="sw-data">
+        <GroupHead x0={DATA_XS[0] - 10} x1={DATA_XS[7] + 10}>
+          S3 · DATA
+        </GroupHead>
+        <Lamps cy={SW_LAMP_Y} r={4.5} lamps={dataBits} />
+        {DATA_XS.map((x, k) => {
+          const bit = 7 - k;
+          const on = dataBits[k].on;
+          return (
+            <Toggle
+              key={`d${bit}`}
+              x={x}
+              on={on}
+              label={`Data switch D${bit}, ${on ? "on" : "off"}`}
+              onFlip={() => setSim((s) => toggleDataBit(s, bit))}
+            >
+              <Silk x={x} y={UP_Y} size={7.5} spacing={0.5} fill={on ? SILK : P.muted}>
+                {`D${bit}`}
+              </Silk>
+            </Toggle>
+          );
+        })}
+        <g pointerEvents="none">
+          <Readout x={(DATA_XS[0] + DATA_XS[7]) / 2} y={SW_READ_Y} size={10}>
+            {`${byte(sim.dataSw)} · ${decodeWord(sim.dataSw) ?? "NOP"}`}
+          </Readout>
+        </g>
       </g>
 
       {/* S4: WRITE, only in PROG */}
       <PushButton
+        tourId="btn-write"
         x={X.write}
         legend="WRITE"
         disabled={!sim.prog}
@@ -1056,6 +1082,7 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
 
       {/* S5 CLEAR / START, S6 SINGLE STEP */}
       <PushButton
+        tourId="btn-clear"
         x={X.clear}
         legend="CLEAR"
         below="START"
@@ -1067,6 +1094,7 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
         }}
       />
       <PushButton
+        tourId="btn-step"
         x={X.step}
         legend="STEP"
         above="SINGLE"
@@ -1077,6 +1105,7 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
 
       {/* S7: MANUAL / AUTO, and the clock rate */}
       <Toggle
+        tourId="sw-auto"
         x={X.auto}
         w={42}
         on={auto}
@@ -1090,6 +1119,7 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
       <RateSwitch x={X.rate} rate={rateIndex} onRate={chooseRate} lamp={auto && sim.cycles % 2 === 1} />
 
       <PushButton
+        tourId="btn-example"
         x={X.load}
         legend="LOAD"
         below="EXAMPLE"
@@ -1099,6 +1129,82 @@ function Controls({ sim, setSim, running, setRunning, rate, setRate }) {
           setSim((s) => clear(loadExample(s)));
         }}
       />
+    </g>
+  );
+}
+
+// --- tour spotlight -------------------------------------------------------------------------
+//
+// The guided tour points at parts of the panel by id (the same ids as the data-tour-id
+// attributes). Each entry is a part's box in panel coordinates; `parts`, when present, lists the
+// separate boxes to outline instead of the one bounding box.
+
+const CTL_Y = HEAD_Y - 9; // a control's switch number or group name …
+const ctl = (x0, x1) => ({ x: x0, y: CTL_Y, w: x1 - x0, h: HIT_BOTTOM - CTL_Y }); // … down to its hit area
+const BUTTON_HALF = 24; // a push button's bezel, half its width
+const button = (x) => ctl(x - BUTTON_HALF, x + BUTTON_HALF);
+
+const RING_PARTS = [
+  // the CLK lamp and its label
+  { x: B.ctrl.x + RING.clk - 9, y: B.ctrl.y + RING.clk - 9, w: 44, h: 18 },
+  // the T1 … T6 lamps and their labels
+  {
+    x: B.ctrl.x + RING.t1 - 11,
+    y: B.ctrl.y + RING.lampY - 11,
+    w: 5 * RING.step + 22,
+    h: RING.labelY - RING.lampY + 15,
+  },
+];
+
+const bounds = (boxes) => {
+  const x = Math.min(...boxes.map((r) => r.x));
+  const y = Math.min(...boxes.map((r) => r.y));
+  const w = Math.max(...boxes.map((r) => r.x + r.w)) - x;
+  const h = Math.max(...boxes.map((r) => r.y + r.h)) - y;
+  return { x, y, w, h };
+};
+
+export const TOUR_BOXES = {
+  ...PANEL_BOXES, // pc, mar, ram, ir, a, alu, b, bus, out, ctrl, con
+  ring: { ...bounds(RING_PARTS), parts: RING_PARTS },
+  "sw-addr": ctl(ADDR_XS[0] - 12, ADDR_XS[3] + 12),
+  "sw-data": ctl(DATA_XS[0] - 9, DATA_XS[7] + 9),
+  "sw-prog": ctl(X.prog - 17, X.prog + 17),
+  "btn-write": button(X.write),
+  "btn-clear": button(X.clear),
+  "btn-step": button(X.step),
+  "sw-auto": ctl(X.auto - 19.5, X.auto + 19.5),
+  "sw-rate": ctl(X.rate - 19, X.rate + 29), // MED is printed to the right of the lever
+  "btn-example": button(X.load),
+};
+
+const SPOT_PAD = 3; // how far the outline sits outside a part
+
+// Pulsing warm-white outlines with an amber glow around the parts in `highlight`, above the
+// panel, and a light shade over everything else. Neither takes pointer events.
+function Spotlight({ highlight }) {
+  const rects = highlight
+    .flatMap((id) => {
+      const box = TOUR_BOXES[id];
+      return box ? (box.parts ?? [box]).map((r, i) => ({ ...r, key: `${id}-${i}` })) : [];
+    })
+    .map((r) => ({ ...r, x: r.x - SPOT_PAD, y: r.y - SPOT_PAD, w: r.w + 2 * SPOT_PAD, h: r.h + 2 * SPOT_PAD }));
+  if (rects.length === 0) return null;
+  return (
+    <g pointerEvents="none" aria-hidden="true">
+      <mask id="gp-spot-mask" maskUnits="userSpaceOnUse" x={0} y={0} width={PANEL.w} height={PANEL.h}>
+        <rect width={PANEL.w} height={PANEL.h} fill="#fff" />
+        {rects.map((r) => (
+          <rect key={r.key} x={r.x} y={r.y} width={r.w} height={r.h} rx={6} fill="#000" />
+        ))}
+      </mask>
+      <rect className="gp-dim" width={PANEL.w} height={PANEL.h} fill="#000" opacity={0.28} mask="url(#gp-spot-mask)" />
+      {rects.map((r) => (
+        <g key={r.key} className="gp-spot">
+          <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={6} fill="none" stroke={P.led.amber.on} strokeWidth={4} opacity={0.55} filter="url(#gp-glow)" />
+          <rect className="gp-spot-line" x={r.x} y={r.y} width={r.w} height={r.h} rx={6} fill="none" stroke={P.led.white.on} strokeWidth={1.8} />
+        </g>
+      ))}
     </g>
   );
 }
@@ -1120,7 +1226,13 @@ const PANEL_CSS = `
 .gp-sweep { pointer-events: none; animation: gp-sweep var(--gp-sweep, 420ms) cubic-bezier(0.45, 0, 0.55, 1) forwards; }
 .gp-breathe { animation: gp-breathe 2.8s ease-in-out infinite; }
 .gp-rm { display: none; }
+.gp-dim { animation: gp-fade-in 250ms ease-out both; }
+.gp-spot { animation: gp-spot 1.4s ease-in-out infinite; }
+.gp-spot-line { animation: gp-spot-line 1.4s ease-in-out infinite; }
 @keyframes gp-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gp-fade-in { from { opacity: 0; } }
+@keyframes gp-spot { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes gp-spot-line { 0%, 100% { stroke-width: 2.2px; } 50% { stroke-width: 1.2px; } }
 @keyframes gp-pulse { from { opacity: 0.85; transform: scale(1.35); } to { opacity: 0; transform: scale(1); } }
 @keyframes gp-sweep {
   from { opacity: 0; transform: translateX(0); }
@@ -1131,7 +1243,7 @@ const PANEL_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .gp-led { transition: none; }
   .gp-flash, .gp-blink, .gp-pulse, .gp-sweep { display: none; }
-  .gp-breathe { animation: none; }
+  .gp-breathe, .gp-dim, .gp-spot, .gp-spot-line { animation: none; }
   .gp-rm { display: inline; }
 }
 `;
@@ -1189,7 +1301,7 @@ function motionVars(ms) {
 // free-running clock. rate / setRate: its rate ("slow" | "med" | "fast"); stepMs: its period in
 // ms (STEP_MS[rate]). onOpen(id): open a part (zooms in from its section). focusId: the hovered or
 // selected part; onEnter(id) / onLeave(id) / onActivate(block, drill): the same callbacks the
-// overview blocks use.
+// overview blocks use. highlight: the ids (TOUR_BOXES keys) of the parts the tour is pointing at.
 export default function GamePanel({
   sim,
   d,
@@ -1204,6 +1316,7 @@ export default function GamePanel({
   onEnter,
   onLeave,
   onActivate,
+  highlight = [],
 }) {
   const ctx = { d, focusId, onEnter, onLeave, onActivate, onOpen };
   const word = sim.ram[d.ramAddr];
@@ -1246,6 +1359,7 @@ export default function GamePanel({
       <ControlWord ctx={ctx} d={d} tick={n.tick} />
 
       <Controls sim={sim} setSim={setSim} running={running} setRunning={setRunning} rate={rate} setRate={setRate} />
+      <Spotlight highlight={highlight} />
     </g>
   );
 }
