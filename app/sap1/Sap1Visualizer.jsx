@@ -23,6 +23,7 @@ import { PALETTES, TEXTBOOK, cssVars } from "./theme";
 import { signalType } from "./signalTypes";
 import { HtmlText, SvgText } from "./sigText";
 import GamePanel, { PANEL_BOXES } from "./GamePanel";
+import GameDiagram, { bitsMarker } from "./gameParts";
 
 // The active color palette (see theme.js). SVG parts read it directly; HTML parts use the
 // matching CSS variables (--sap-*) set on the page root. An active part is drawn in the color of
@@ -85,25 +86,8 @@ const pathFromHash = () =>
   cleanPath(window.location.hash.replace(/^#\/?/, "").split("/").filter(Boolean));
 
 // --- diagram pieces -------------------------------------------------------------------------
-
-function bitsMarker(pts, at) {
-  let best = null;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x1, y1] = pts[i];
-    const [x2, y2] = pts[i + 1];
-    const h = y1 === y2;
-    if (at) {
-      const inside = h
-        ? at[1] === y1 && at[0] >= Math.min(x1, x2) && at[0] <= Math.max(x1, x2)
-        : at[0] === x1 && at[1] >= Math.min(y1, y2) && at[1] <= Math.max(y1, y2);
-      if (inside) return { x: at[0], y: at[1], h };
-    } else {
-      const len = Math.abs(x2 - x1) + Math.abs(y2 - y1);
-      if (!best || len > best.len) best = { x: (x1 + x2) / 2, y: (y1 + y2) / 2, h, len };
-    }
-  }
-  return best;
-}
+// The textbook drawing. Game mode draws the levels below the front panel as hardware instead
+// (gameParts.jsx), from the same data.
 
 function Wire({ w, d }) {
   const P = usePalette();
@@ -765,7 +749,7 @@ export default function Sap1Visualizer() {
   );
 
   const openPart = useCallback((id) => navigate([...pathRef.current, id]), [navigate]);
-  // Game mode shows the overview as a front panel; the levels below keep their diagrams.
+  // Game mode shows the overview as a front panel and the levels below as chips on a board.
   const showPanel = mode === "game" && path.length === 0;
 
   const focusId = hoverId ?? selectedId;
@@ -968,6 +952,17 @@ export default function Sap1Visualizer() {
                         running={running}
                         setRunning={setRunning}
                         onOpen={openPart}
+                        focusId={focusId}
+                        onEnter={onEnter}
+                        onLeave={onLeave}
+                        onActivate={onActivate}
+                      />
+                    ) : mode === "game" ? (
+                      <GameDiagram
+                        node={node}
+                        path={path}
+                        sim={sim}
+                        d={d}
                         focusId={focusId}
                         onEnter={onEnter}
                         onLeave={onLeave}
