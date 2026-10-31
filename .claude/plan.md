@@ -36,6 +36,16 @@
 
 10. **Final check and polish** (any `app/sap1/*` file). Run `npm run lint`, then stop the dev server and run `npm run build`; fix any errors. Check `/sap1` in both modes at desktop and phone width (375px): no horizontal page scroll outside the diagram frame, text readable, controls reachable. Check keyboard: tab through panel controls and blocks, Enter/Space work, Esc goes up a level. Check `prefers-reduced-motion` turns off the travelling effects. Fix small issues; report anything bigger as leftover work.
 
+11. **Remove /sap1 from this site and link out** (files: delete `app/sap1/`, edit `app/page.jsx`). BLOCKED until the standalone site in `C:\Users\DomPC\Desktop\websites\sap-computer` (see "After Next" below) is built and pushed, and the user has given its public URL. Delete the `app/sap1` folder, change the SAP-1 link on the homepage (`app/page.jsx`) to the new site's URL (opens the external site), and check nothing else imports from `app/sap1`. Check with the `next-dev` preview that the homepage renders and the link points to the new URL.
+
+## After Next (user request, 2026-10-31)
+
+When tasks 1–10 are done, run `/z` in `C:\Users\DomPC\Desktop\websites\sap-computer` (currently an empty folder) to create a standalone SAP-1 website there, moving the finished SAP-1 visualizer over. User's answers:
+- Stack: **Vite + React** static site (the SAP-1 code is client-only React; port the Tailwind classes and the `app/sap1/*` files, and replace Next-specific bits such as `metadata`, `next/link` and the "← home" link).
+- Git: `git init -b main` and a **new public GitHub repo** `sap-computer` on the `reservetempo` account (via `gh repo create`), pushed from there.
+- Extras: an **about/credits footer** crediting Malvino & Brown's *Digital Computer Electronics* and linking back to the main site. No landing section, no deploy config for now.
+- Then come back here for task 11 (remove `/sap1`, link the homepage to the new site's URL once the user gives it).
+
 ## Done
 
 - Task 1, dark textbook theme: f1cebb0. `/sap1` is dark only; colors come from the `TEXTBOOK` palette in `app/sap1/theme.js` (React context for the SVG, `--sap-*` CSS variables for the HTML).
