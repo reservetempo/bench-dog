@@ -121,9 +121,10 @@ a:focus-visible { outline: 2px solid var(--rubric); outline-offset: 2px; }
 
 h1 {
   margin: 0.15em 0 0.1em;
-  font-family: "UnifrakturMaguntia", "Cinzel", serif;
-  font-weight: 400;
-  font-size: clamp(2.6rem, 10vw, 4.6rem);
+  font-family: "Cinzel", serif;
+  font-weight: 700;
+  font-size: clamp(2rem, 8vw, 3.8rem);
+  letter-spacing: 0.02em;
   line-height: 1.05;
 }
 h1 .amp { color: var(--rubric); }
@@ -188,11 +189,11 @@ h1 .amp { color: var(--rubric); }
   float: left;
   margin: 0.06em 0.14em 0 0;
   padding: 0.1em 0.14em 0.02em;
-  font-family: "UnifrakturMaguntia", "Cinzel", serif;
+  font-family: "Cinzel", serif;
   font-style: normal;
-  font-weight: 400;
-  font-size: 3.3em;
-  line-height: 0.9;
+  font-weight: 700;
+  font-size: 2.9em;
+  line-height: 0.95;
   color: var(--rubric);
   background: var(--parchment-shade);
   border: 1px solid var(--gold);
@@ -224,9 +225,9 @@ h1 .amp { color: var(--rubric); }
 .sheet-head { text-align: center; margin-bottom: 1.25rem; }
 .sheet h2 {
   margin: 0.1em 0 0;
-  font-family: "UnifrakturMaguntia", "Cinzel", serif;
-  font-weight: 400;
-  font-size: clamp(2rem, 7vw, 2.8rem);
+  font-family: "Cinzel", serif;
+  font-weight: 700;
+  font-size: clamp(1.6rem, 6vw, 2.3rem);
   line-height: 1.1;
 }
 .title { margin: 0.15em 0 0; font-style: italic; color: var(--ink-soft); }
