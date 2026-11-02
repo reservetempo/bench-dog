@@ -41,10 +41,11 @@
 
 ## Next
 
-4. **Gates play task 4, final check and polish.** Check `/gates/play` at phone width (375×812): board fits, controls reachable without horizontal scroll, touch targets at least 44px. Keyboard: tab through Lit/Dark, Send and Reset with visible focus. Dark-mode page chrome. Reduced-motion code path reviewed. Frame loop pauses when the tab is hidden, and the canvas is resized without blurring. With the preview tab fronted, watch the torch flicker, a full lit run and a full dark run play in real time (smooth, nothing clipping through the arch or the lord). `npm run build` is clean. Fix small problems found; report anything bigger.
+(nothing)
 
 ## Done
 
+- Gates play task 4, final check and polish: 0a93fcc. Phone width, keyboard order and focus rings, dark-mode contrast, reduced motion, both runs (no clipping through the arch or the lord), console and `npm run build` all pass. Fixes: pixel ratio reapplied on resize (sharp after browser zoom), and the lord's gestures reuse one vector instead of allocating per frame. The animation was stepped by hand, not watched live (the pane was hidden), so a live look in a browser is still to do.
 - Gates play task 3, the run: c633515. New `public/gates/play/run.js`: Send walks Hob to Lord Gainsay, the lord snuffs or lights his torch at contact, Hob walks on and sparks light the beacon or fizzle; step-by-step readout, `#status` outcome, Reset at any point, reduced-motion jumps. Checked by stepping frames by hand (the pane was hidden): both outcomes, route stays on the road, five Reset timings, phone width.
 - Gates play task 2, the pieces: 370e060. New `public/gates/play/pieces.js`: low-poly Hob (0.42 tall, fits under the arch), Lord Gainsay (0.66, NOT-symbol cloak and ruff, snuffer and flint gestures), torch with flicker, light and smoke, and a stone beacon tower; `onFrame` hook in `main.js`; the Lit/Dark radios set Hob's torch. API checked from the console; flicker only checked by stepping frames (the pane was hidden).
 - Gates play task 1, page, board and camera: 31edaae. `/gates/play` rewrite; `public/gates/play/` `index.html`, `style.css`, `main.js`, `map.js`: dusk board from map data (bevelled tiles, shaped road, hut, gatehouse with arch, placeholder beacon, decor), fixed isometric orthographic camera that refits on resize, unwired controls, fallback message. Checked at desktop, phone and dark mode, no console errors.
