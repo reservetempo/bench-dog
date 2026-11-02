@@ -132,6 +132,7 @@ async function start() {
     const w = stage.clientWidth;
     const h = stage.clientHeight;
     if (!w || !h) return;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); // follows browser zoom
     renderer.setSize(w, h, false);
     fitCamera(w / h);
     renderer.render(scene, camera);

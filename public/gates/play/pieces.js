@@ -481,7 +481,10 @@ export function createLord() {
   }
 
   function targetFn(target) {
-    if (typeof target === 'function') return () => toVec3(target());
+    if (typeof target === 'function') {
+      const v = new THREE.Vector3(); // reused every frame, not reallocated
+      return () => { const p = target(); return p ? v.set(p.x, p.y, p.z) : null; };
+    }
     const fixed = toVec3(target) || group.localToWorld(V(0, 0.42, 0.38));
     return () => fixed;
   }
