@@ -11,18 +11,20 @@ const nextConfig = {
       },
     ],
   },
-  // Plain HTML pages in public/: Unit Tree at /units, gate character doc at /gates,
-  // the playable gates prototype at /gates/play
+  // Plain HTML pages in public/: Unit Tree at /units
   async rewrites() {
     return [
       { source: '/units', destination: '/units/index.html' },
-      { source: '/gates', destination: '/gates/index.html' },
-      { source: '/gates/play', destination: '/gates/play/index.html' },
     ];
   },
-  // SAP-1 moved to its own site; keep old /sap1 links working
+  // SAP-1 and the gates game (Lords & Logicians) moved to their own sites;
+  // keep old /sap1, /gates (design doc) and /gates/play links working
   async redirects() {
-    return [{ source: '/sap1', destination: 'https://reservetempo.github.io/sap-computer/', permanent: true }];
+    return [
+      { source: '/sap1', destination: 'https://reservetempo.github.io/sap-computer/', permanent: true },
+      { source: '/gates', destination: 'https://reservetempo.github.io/logic-king/design/', permanent: true },
+      { source: '/gates/play', destination: 'https://reservetempo.github.io/logic-king/', permanent: true },
+    ];
   },
 };
 
