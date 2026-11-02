@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Lords &amp; Logicians · Characters</title>
+  <meta name="description" content="Character list for Lords & Logicians, a 2.5D game where logic gates are medieval monks, lords and torch-carrying peasants.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&amp;family=EB+Garamond:ital,wght@0,400;0,600;1,400&amp;family=UnifrakturMaguntia&amp;display=swap">
+  <link rel="stylesheet" href="/gates/style.css">
+</head>
+<body>
+<main class="leaf">
+
+  <header class="masthead">
+    <p class="kicker">Design document · Character list</p>
+    <h1>Lords <span class="amp">&amp;</span> Logicians</h1>
+    <p class="subtitle">The Book of Characters</p>
+  </header>
+
+  <section class="intro" aria-label="The world">
+    <p class="drop">In this realm every thought travels on foot. Signals are <b>torchbearers</b>, peasants who walk the roads between gates, each carrying a single torch: a <em>lit</em> torch is 1, a <em>dark</em> one is 0. A gate takes the torchbearers who arrive and sends one torchbearer onward, lit or dark, according to the nature of whoever keeps it.</p>
+    <ul class="orders">
+      <li><b>Peasants carry</b> Torchbearers never change a torch on the road. They only walk.</li>
+      <li><b>Monks combine</b> Logician monks weigh two torches and send one on.</li>
+      <li><b>Lords negate</b> A lord overturns what reaches him. The greater lords keep a monk at court and overturn the monk.</li>
+    </ul>
+    <p>Every silhouette echoes its gate symbol, and every lord wears a small ring (a ruff, a brooch, a clasp): the bubble of negation.</p>
+    <p class="motto">Lords negate, monks combine.</p>
+  </section>
+
+  <nav class="contents" aria-label="Characters">
+    <ol>
+      <li><a href="#torchbearer">Hob Wickfoot</a></li>
+      <li><a href="#not">Lord Gainsay <small>NOT</small></a></li>
+      <li><a href="#and">Brother Bothwell <small>AND</small></a></li>
+      <li><a href="#or">Brother Orrin <small>OR</small></a></li>
+      <li><a href="#nand">Count Nandric <small>NAND</small></a></li>
+      <li><a href="#nor">Lady Norwenna <small>NOR</small></a></li>
+    </ol>
+  </nav>
+
+  <div class="flourish" aria-hidden="true">❦</div>
+
+  <!-- Torchbearer -->
+  <article class="sheet" id="torchbearer" aria-labelledby="torchbearer-name">
+    <header class="sheet-head">
+      <p class="gate">The signal</p>
+      <h2 id="torchbearer-name">Hob Wickfoot</h2>
+      <p class="title">Torchbearer of the Low Road, and all his kin</p>
+    </header>
+    <figure class="portrait" data-portrait="torchbearer"></figure>
+    <div class="sheet-text">
+      <dl class="facts">
+        <dt>Class</dt><dd>Peasant · carries</dd>
+        <dt>Carries</dt><dd>One torch, lit (1) or dark (0)</dd>
+      </dl>
+      <section class="field">
+        <h3>Personality</h3>
+        <p class="drop">Cheerful, dutiful and wholly incurious. A torchbearer never lights or snuffs a torch on the road: he carries what he is handed to the next gate and waits to be told. Gossips in queues, waves at other torchbearers, and flinches whenever Lord Gainsay looks up.</p>
+      </section>
+      <section class="field">
+        <h3>Look</h3>
+        <p>Small and round, with short legs and a bobbing walk so a crowd reads at a glance. Undyed wool tunic, patched hood, rope belt, bound feet. The torch rides high on a long pole so its state shows from across the map: lit, it throws a warm halo; dark, it is a charred wick with a thread of smoke. Hood colors (madder red, woad blue, weld yellow) tell individuals apart.</p>
+      </section>
+    </div>
+  </article>
+
+  <div class="flourish" aria-hidden="true">❦</div>
+
+  <!-- NOT -->
+  <article class="sheet" id="not" aria-labelledby="not-name">
+    <header class="sheet-head">
+      <p class="gate">Gate · NOT</p>
+      <h2 id="not-name">Lord Gainsay</h2>
+      <p class="title">Baron of Contrary Keep</p>
+    </header>
+    <figure class="portrait" data-portrait="not"></figure>
+    <div class="sheet-text">
+      <dl class="facts">
+        <dt>Class</dt><dd>Lord · negates</dd>
+        <dt>Torches</dt><dd>One in, one out</dd>
+      </dl>
+      <section class="field">
+        <h3>The rule</h3>
+        <p class="rule drop">Bring me fire and I snuff it. Bring me darkness and I light it, out of pure spite. Whatever you carry in, you carry the opposite out.</p>
+      </section>
+      <section class="field">
+        <h3>Truth table</h3>
+        <table class="truth">
+          <caption class="vh">NOT: output for each input torch</caption>
+          <thead><tr><th scope="col">In</th><th scope="col">Out</th></tr></thead>
+          <tbody>
+            <tr><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="field">
+        <h3>Personality</h3>
+        <p>Contrary to the bone: he says no before you finish asking, and yes if you ask for no. He never schemes and never makes exceptions, which makes the most spiteful man in the realm also its most reliable. Smirks whenever a lit torch walks up his road.</p>
+      </section>
+      <section class="field">
+        <h3>Look</h3>
+        <p>Tall and gaunt, his black cloak falling from the shoulders in a hard triangle, with a round white ruff at the throat: the NOT symbol worn as a costume. Pale face, pointed beard, a long snuffer in one hand and a flint in the other. Colors: black, rubric-red lining, cold silver.</p>
+      </section>
+    </div>
+  </article>
+
+  <div class="flourish" aria-hidden="true">❦</div>
+
+  <!-- AND -->
+  <article class="sheet" id="and" aria-labelledby="and-name">
+    <header class="sheet-head">
+      <p class="gate">Gate · AND</p>
+      <h2 id="and-name">Brother Bothwell</h2>
+      <p class="title">Prior of the Abbey of Concord</p>
+    </header>
+    <figure class="portrait" data-portrait="and"></figure>
+    <div class="sheet-text">
+      <dl class="facts">
+        <dt>Class</dt><dd>Monk · combines</dd>
+        <dt>Torches</dt><dd>Two in, one out</dd>
+      </dl>
+      <section class="field">
+        <h3>The rule</h3>
+        <p class="rule drop">Only when both of you arrive lit will I light the torch that leaves. One dark torch is dissent, and dissent means no.</p>
+      </section>
+      <section class="field">
+        <h3>Truth table</h3>
+        <table class="truth">
+          <caption class="vh">AND: output for each pair of input torches</caption>
+          <thead><tr><th scope="col">In A</th><th scope="col">In B</th><th scope="col">Out</th></tr></thead>
+          <tbody>
+            <tr><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td></tr>
+            <tr><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="field">
+        <h3>Personality</h3>
+        <p>Patient, exacting and a little pedantic. He will not be hurried, and a majority of one does not move him; he counts both arrivals twice before he nods. Argues amiably with Brother Orrin at chapter every morning.</p>
+      </section>
+      <section class="field">
+        <h3>Look</h3>
+        <p>Round-backed and solid: a brown habit and heavy cowl give him the flat-fronted, rounded D of the AND symbol. Tonsure, spectacles, a rope girdle tied in two knots, a ledger under one arm. Colors: habit brown, cream, a touch of gold leaf on the ledger.</p>
+      </section>
+    </div>
+  </article>
+
+  <div class="flourish" aria-hidden="true">❦</div>
+
+  <!-- OR -->
+  <article class="sheet" id="or" aria-labelledby="or-name">
+    <header class="sheet-head">
+      <p class="gate">Gate · OR</p>
+      <h2 id="or-name">Brother Orrin</h2>
+      <p class="title">Almoner of Eithermere Priory</p>
+    </header>
+    <figure class="portrait" data-portrait="or"></figure>
+    <div class="sheet-text">
+      <dl class="facts">
+        <dt>Class</dt><dd>Monk · combines</dd>
+        <dt>Torches</dt><dd>Two in, one out</dd>
+      </dl>
+      <section class="field">
+        <h3>The rule</h3>
+        <p class="rule drop">If even one of you arrives lit, the torch that leaves is lit. Only two dark torches send a dark one on.</p>
+      </section>
+      <section class="field">
+        <h3>Truth table</h3>
+        <table class="truth">
+          <caption class="vh">OR: output for each pair of input torches</caption>
+          <thead><tr><th scope="col">In A</th><th scope="col">In B</th><th scope="col">Out</th></tr></thead>
+          <tbody>
+            <tr><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td></tr>
+            <tr><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="field">
+        <h3>Personality</h3>
+        <p>Warm, generous and easily pleased: one flame is reason enough to celebrate. He hums while he works and is forever giving away his supper. Thinks Brother Bothwell far too strict, and tells him so, kindly.</p>
+      </section>
+      <section class="field">
+        <h3>Look</h3>
+        <p>Lanky and light on his feet; a pointed cowl and a habit that sweeps back in a curve give him the shield-like outline of the OR symbol. Grey habit, lapis-blue scapular, an alms bag, and a small lantern at his belt that is always lit. Colors: dove grey, lapis, candle yellow.</p>
+      </section>
+    </div>
+  </article>
+
+  <div class="flourish" aria-hidden="true">❦</div>
+
+  <!-- NAND -->
+  <article class="sheet" id="nand" aria-labelledby="nand-name">
+    <header class="sheet-head">
+      <p class="gate">Gate · NAND</p>
+      <h2 id="nand-name">Count Nandric</h2>
+      <p class="title">Count of Neverboth</p>
+    </header>
+    <figure class="portrait" data-portrait="nand"></figure>
+    <div class="sheet-text">
+      <dl class="facts">
+        <dt>Class</dt><dd>Lord · negates, with a monk of Concord (AND) at court</dd>
+        <dt>Torches</dt><dd>Two in, one out</dd>
+      </dl>
+      <section class="field">
+        <h3>The rule</h3>
+        <p class="rule drop">My monk weighs the torches as the Abbey of Concord teaches; then I overturn him. Two lit torches leave dark. Anything less leaves lit.</p>
+      </section>
+      <section class="field">
+        <h3>Truth table</h3>
+        <table class="truth">
+          <caption class="vh">NAND: output for each pair of input torches</caption>
+          <thead><tr><th scope="col">In A</th><th scope="col">In B</th><th scope="col">Out</th></tr></thead>
+          <tbody>
+            <tr><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="field">
+        <h3>Personality</h3>
+        <p>Suspicious of agreement: when everyone concurs he smells a plot and overturns it. In every other case he is easygoing and open-handed, so most torches leave his hall lit. Boasts that his house alone could govern the realm without any other gate, and, irritatingly, he is right.</p>
+      </section>
+      <section class="field">
+        <h3>Look</h3>
+        <p>Stout, in a rounded surcoat that echoes the AND monk beside him, with a large gold ring brooch at the breast: the bubble of negation. A small brown-robed Concord monk stands at his elbow with an open ledger, so the sprite is a pair, lord in front and monk half a step behind. Colors: wine red, gold trim, habit brown.</p>
+      </section>
+    </div>
+  </article>
+
+  <div class="flourish" aria-hidden="true">❦</div>
+
+  <!-- NOR -->
+  <article class="sheet" id="nor" aria-labelledby="nor-name">
+    <header class="sheet-head">
+      <p class="gate">Gate · NOR</p>
+      <h2 id="nor-name">Lady Norwenna</h2>
+      <p class="title">Margravine of Neithermoor</p>
+    </header>
+    <figure class="portrait" data-portrait="nor"></figure>
+    <div class="sheet-text">
+      <dl class="facts">
+        <dt>Class</dt><dd>Lord · negates, with a monk of Eithermere (OR) at court</dd>
+        <dt>Torches</dt><dd>Two in, one out</dd>
+      </dl>
+      <section class="field">
+        <h3>The rule</h3>
+        <p class="rule drop">My almoner would light the way if either torch were lit. I forbid it. The torch that leaves burns only when both arrive dark.</p>
+      </section>
+      <section class="field">
+        <h3>Truth table</h3>
+        <table class="truth">
+          <caption class="vh">NOR: output for each pair of input torches</caption>
+          <thead><tr><th scope="col">In A</th><th scope="col">In B</th><th scope="col">Out</th></tr></thead>
+          <tbody>
+            <tr><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td></tr>
+            <tr><td class="dark">0 <i>dark</i></td><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td><td class="dark">0 <i>dark</i></td></tr>
+            <tr><td class="lit">1 <i>lit</i></td><td class="lit">1 <i>lit</i></td><td class="dark">0 <i>dark</i></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="field">
+        <h3>Personality</h3>
+        <p>Cold, courteous and austere, a lover of the long night. She trusts darkness and takes any flame as a provocation, so only two dark torches please her. Like Count Nandric she could rule the whole realm with her house alone; unlike him, she would never say so aloud.</p>
+      </section>
+      <section class="field">
+        <h3>Look</h3>
+        <p>Tall and still, in a midnight-blue gown whose curved, pointed train echoes the OR shape, with a round silver clasp at her collar. A grey Eithermere monk follows her carrying a lantern she keeps dark. Colors: midnight blue, silver, lapis, one rubric-red glove.</p>
+      </section>
+    </div>
+  </article>
+
+  <footer class="colophon">
+    <div class="flourish" aria-hidden="true">❦</div>
+    <p>Working document · characters only · portraits to follow</p>
+  </footer>
+
+</main>
+</body>
+</html>

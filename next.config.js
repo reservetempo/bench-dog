@@ -11,9 +11,12 @@ const nextConfig = {
       },
     ],
   },
-  // Unit Tree is a plain HTML/JS app in public/units; serve it at /units
+  // Plain HTML pages in public/: Unit Tree at /units, gate character doc at /gates
   async rewrites() {
-    return [{ source: '/units', destination: '/units/index.html' }];
+    return [
+      { source: '/units', destination: '/units/index.html' },
+      { source: '/gates', destination: '/gates/index.html' },
+    ];
   },
   // SAP-1 moved to its own site; keep old /sap1 links working
   async redirects() {
