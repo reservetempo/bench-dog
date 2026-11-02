@@ -15,9 +15,9 @@ function showMessage(text) {
 }
 
 async function start() {
-  let THREE, map;
+  let THREE, map, pieces;
   try {
-    [THREE, map] = await Promise.all([import('three'), import('./map.js')]);
+    [THREE, map, pieces] = await Promise.all([import('three'), import('./map.js'), import('./pieces.js')]);
   } catch (err) {
     console.warn('Lords & Logicians: the 3D engine failed to load.', err);
     showMessage('The board could not be drawn: the 3D engine failed to load. Check your connection and reload the page.');
@@ -56,6 +56,27 @@ async function start() {
   const board = map.buildBoard();
   scene.add(board);
 
+  // ---- pieces: in the scene, not the board, so they don't move the camera fit ----
+  const hob = pieces.createHob();
+  hob.group.position.copy(map.path[0]);
+  hob.group.lookAt(map.path[1]);
+  scene.add(hob.group);
+
+  const lord = pieces.createLord();
+  lord.group.position.copy(map.lordSpot);
+  lord.group.lookAt(map.tileCenter(map.lordTile.row, map.lordTile.col, map.lordSpot.y));
+  scene.add(lord.group);
+
+  // The beacon replaces the board's placeholder: tower 0.26 past the road's end, door to the road.
+  const roadEnd = map.path[map.path.length - 1];
+  const roadIn = roadEnd.clone().sub(map.path[map.path.length - 2]).setY(0).normalize();
+  const beacon = pieces.createBeacon();
+  beacon.group.position.copy(roadEnd).addScaledVector(roadIn, 0.26).setY(map.TILE_TOP);
+  beacon.group.lookAt(roadEnd.clone().setY(map.TILE_TOP));
+  scene.add(beacon.group);
+  const placeholder = board.getObjectByName('beaconPlaceholder');
+  if (placeholder) placeholder.visible = false;
+
   // ---- camera: fixed isometric view from the south-west, so the road runs left to right ----
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   const AZIMUTH = THREE.MathUtils.degToRad(-45);      // around the vertical axis
@@ -77,8 +98,7 @@ async function start() {
   const MARGIN = 1.05;
   function fitCamera(aspect) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    board.updateMatrixWorld(true);
-    board.traverseVisible((o) => {
+    const fit = (o) => {
       if (!o.isMesh) return;
       if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
       box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
@@ -88,7 +108,11 @@ async function start() {
         minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
         minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y);
       }
-    });
+    };
+    board.updateMatrixWorld(true);
+    board.traverseVisible(fit);
+    beacon.bounds.updateWorldMatrix(true, false);
+    fit(beacon.bounds); // the static beacon, lit flame included (hidden box)
     let halfW = ((maxX - minX) / 2) * MARGIN;
     let halfH = ((maxY - minY) / 2) * MARGIN;
     if (halfW / halfH > aspect) halfH = halfW / aspect;
@@ -113,14 +137,44 @@ async function start() {
   new ResizeObserver(resize).observe(stage);
   resize();
 
-  // ---- loop ----
-  function frame() {
+  // ---- loop, with a per-frame hook: onFrame(fn) calls fn(dt, elapsed) in seconds ----
+  const hooks = new Set();
+  const failed = new WeakSet();
+  function onFrame(fn) {
+    hooks.add(fn);
+    return () => hooks.delete(fn);
+  }
+  let last = performance.now();
+  let elapsed = 0;
+  function frame(now) {
+    const dt = Math.min(Math.max((now - last) / 1000, 0), 0.1); // clamp after a hidden tab
+    last = now;
+    elapsed += dt;
+    for (const fn of Array.from(hooks)) {
+      try {
+        fn(dt, elapsed);
+      } catch (err) {
+        if (!failed.has(fn)) console.error('Lords & Logicians: a frame hook failed.', err);
+        failed.add(fn);
+      }
+    }
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  onFrame(pieces.update);
 
-  window.__gates = { scene, camera, renderer, board };
+  // ---- controls: the Lit/Dark radios set Hob's torch at the start ----
+  const radios = document.querySelectorAll('input[name="torch"]');
+  const checked = document.querySelector('input[name="torch"]:checked');
+  hob.setLit(!checked || checked.value === '1');
+  for (const r of radios) {
+    r.addEventListener('change', () => {
+      if (r.checked) hob.setLit(r.value === '1', { animate: true });
+    });
+  }
+
+  window.__gates = { scene, camera, renderer, board, onFrame, pieces: { hob, lord, beacon } };
 }
 
 start();
