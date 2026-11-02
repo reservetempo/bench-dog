@@ -41,7 +41,21 @@
 
 ## Next
 
-(nothing)
+- **Task 12, logic-king site and GitHub Page** (works in `C:\Users\DomPC\Desktop\websites\logic-king`, an empty folder, not yet a git repo). User's choices: move the game **and** the design doc; public repo `reservetempo/logic-king` (approved), served at `https://reservetempo.github.io/logic-king/`.
+  - **Copy** (don't delete; task 13 removes the originals) from `dominic_my_website/public/gates/play/` to the logic-king root: `index.html`, `style.css`, `main.js`, `map.js`, `pieces.js`, `run.js`. From `dominic_my_website/public/gates/` to `logic-king/design/`: `index.html`, `style.css`.
+  - **Relative paths:** Pages serves the site under `/logic-king/`, so the absolute `/gates/...` paths break. Root `index.html`: `href="style.css"`, `src="main.js"`. `design/index.html`: `href="style.css"`. Grep every copied file for `/gates` and fix the rest (e.g. the comment on line 2 of the game's `style.css` now points at `design/style.css`). The JS modules already import with `./`.
+  - **Links each way:** a small "Design notes" link in the game's page chrome to `design/`, and a small "Play the prototype" link near the top of the design doc to `../`. Unobtrusive, in each page's existing manuscript style, keyboard focusable with a visible focus ring, fine at phone width.
+  - **Extras:** empty `.nojekyll`; a short `README.md` (what it is, the live URL, run locally with `python -m http.server 8000`); `.claude/launch.json` with one config `static` (`runtimeExecutable` `python`, `runtimeArgs` `["-m", "http.server", "8000"]`, port 8000).
+  - **Check before committing:** `preview_start` `static`, then `http://localhost:8000/` and `http://localhost:8000/design/`: styles load, the 3D board renders, no console errors or 404s, both links work. Both runs via `window.__gates.run.send()` / `.reset()` (Lit → beacon stays dark, Dark → beacon lights). The preview pane may be hidden, in which case `requestAnimationFrame` never fires: front the tab with `tabs_select`, or step `window.__gates.pieces` and the `onFrame` hooks by hand.
+  - **Git and Pages:** `git init -b main`, stage the files by name, one commit. Then `gh repo create reservetempo/logic-king --public --source . --remote origin --push`, then turn on Pages from the branch: `gh api -X POST repos/reservetempo/logic-king/pages -f build_type=legacy -f "source[branch]=main" -f "source[path]=/"`. Wait until `gh api repos/reservetempo/logic-king/pages/builds/latest --jq .status` says `built` (short checks, not long sleeps), then open `https://reservetempo.github.io/logic-king/` and `.../design/` in the built-in browser and confirm both load with styles and the scene, with no 404s.
+  - Done: the repo is pushed, Pages is live at both URLs. Report the hash and the live URL.
+- **Task 13, remove gates from the personal site** (in `dominic_my_website`, after task 12 is live).
+  - `git rm -r public/gates/`.
+  - `next.config.js`: remove the `/gates` and `/gates/play` rewrites (keep `/units`) and update the comment above them. Add permanent redirects next to the `/sap1` one: `/gates` → `https://reservetempo.github.io/logic-king/design/`, `/gates/play` → `https://reservetempo.github.io/logic-king/`, with a comment like the SAP-1 one.
+  - `app/page.jsx`: add a homepage link after the `sap-1` one (around line 104), same markup and `elementClasses`, `href="https://reservetempo.github.io/logic-king/"`, text `logic king`. The new link is now last, so give `sap-1` the same right margin the `units` link has.
+  - Grep `app/` and `public/` for any other `/gates` reference and fix it.
+  - Check: `next-dev` preview (restart it, since `next.config.js` changed): `/gates` and `/gates/play` redirect to the right URLs, the homepage link shows and works at desktop and phone width, no console errors. `npm run build` passes.
+  - Done: one commit, pushed.
 
 ## Done
 
