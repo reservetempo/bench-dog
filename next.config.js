@@ -11,11 +11,13 @@ const nextConfig = {
       },
     ],
   },
-  // Plain HTML pages in public/: Unit Tree at /units, gate character doc at /gates
+  // Plain HTML pages in public/: Unit Tree at /units, gate character doc at /gates,
+  // the playable gates prototype at /gates/play
   async rewrites() {
     return [
       { source: '/units', destination: '/units/index.html' },
       { source: '/gates', destination: '/gates/index.html' },
+      { source: '/gates/play', destination: '/gates/play/index.html' },
     ];
   },
   // SAP-1 moved to its own site; keep old /sap1 links working
