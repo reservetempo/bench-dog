@@ -15,9 +15,11 @@ function showMessage(text) {
 }
 
 async function start() {
-  let THREE, map, pieces;
+  let THREE, map, pieces, runner;
   try {
-    [THREE, map, pieces] = await Promise.all([import('three'), import('./map.js'), import('./pieces.js')]);
+    [THREE, map, pieces, runner] = await Promise.all([
+      import('three'), import('./map.js'), import('./pieces.js'), import('./run.js'),
+    ]);
   } catch (err) {
     console.warn('Lords & Logicians: the 3D engine failed to load.', err);
     showMessage('The board could not be drawn: the 3D engine failed to load. Check your connection and reload the page.');
@@ -174,7 +176,19 @@ async function start() {
     });
   }
 
-  window.__gates = { scene, camera, renderer, board, onFrame, pieces: { hob, lord, beacon } };
+  // ---- the run: Send walks Hob past Lord Gainsay to the beacon; Reset puts it all back ----
+  const run = runner.createRun({
+    hob, lord, beacon, scene, onFrame,
+    ui: {
+      sendBtn: document.getElementById('send'),
+      resetBtn: document.getElementById('reset'),
+      readout: document.getElementById('readout'),
+      status: document.getElementById('status'),
+      radios,
+    },
+  });
+
+  window.__gates = { scene, camera, renderer, board, onFrame, pieces: { hob, lord, beacon }, run };
 }
 
 start();
