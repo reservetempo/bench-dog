@@ -2,35 +2,25 @@
 
 ## Shared context (include in every subagent prompt)
 
-- Next.js 14 app (React 18, Tailwind 3, plain JS/JSX). The SAP-1 page is `/sap1`: `app/sap1/page.jsx` → `app/sap1/Sap1Visualizer.jsx` (diagram, zoom/drill-down via URL hash, controls, info panel), `app/sap1/sap1Parts.js` (part tree: each node has `diagram.blocks`/`wires`/`pins`/`groups` and `children` for drill-down), `app/sap1/sap1Sim.js` (simulator: `initialState`, `derive`, `step`, `signals`, `describe`, `CON_ORDER`, `bin`, `hex`).
-- Only change the `/sap1` route; the rest of the site stays as it is.
-- User decisions:
-  - **Dark only.** No light theme, no theme toggle.
-  - **Two modes**, switched by a toggle on the page, remembered in `localStorage` (wrap in try/catch, render fine without it):
-    - **Textbook mode**: today's simple block diagram with numbers, drawn light-on-dark (blackboard style). A single accent color for "active".
-    - **Game mode** (the default on first visit): a 1970s computer front panel (Altair-8800 style) drawn in SVG. Registers are rows of LEDs, inputs are toggle switches and push buttons that light up when on or pressed. No three.js.
-  - **Period-accurate colors only** (what existed in the 1970s): red, amber/yellow, yellow-green and warm incandescent white. No blue, cyan or magenta.
-  - **LED color by signal type**: address = amber, data = green, control signals = red, clock/T-state/status lamps = warm incandescent white, output display = red. The bus takes amber when it carries an address (Ep or Ei driving) and green when it carries data.
-  - Keep the 0/1 numbers too. LEDs are in addition to the binary/hex text, not a replacement.
-  - **Users can program the RAM** with the switches, as in the book: RUN/PROG switch, 4 address switches, 8 data switches, a WRITE button.
-  - **Guided tour** (opt-in) for learning: power on → clear → enter a program with the switches → back to RUN → fetch → execute → output → halt.
-- Respect `prefers-reduced-motion`. Keep keyboard access (role="button", tabIndex, Enter/Space) for anything clickable. Must work at phone width (the SVG can scroll horizontally inside its frame, as now).
-- Checking: launch config `next-dev` in `.claude/launch.json` (`npm run dev`, port 3000), page `http://localhost:3000/sap1`. Don't run `next build` while the dev server is running (they share `.next`); stop the preview first if a build is needed.
+- Next.js 14 site (plain JS/JSX, Tailwind). Plain HTML pages live in `public/` and get a rewrite in `next.config.js`, like `/units` (`public/units/index.html` + `style.css`, rewrite `{ source: '/units', destination: '/units/index.html' }`). Don't touch the rest of the site.
+- New page: **`/gates`**, a design document (plain HTML + CSS, no framework, no build step) for the character list of a 2.5D game where logic gates are medieval people. Files: `public/gates/index.html`, `public/gates/style.css`. **No link from the homepage** (reachable by URL only for now).
+- World rule: signals are **torchbearers** (peasants) walking between gates. **Lit torch = 1, unlit = 0.** A gate takes the torchbearers that arrive and sends one torchbearer onward, lit or unlit.
+- Casting (user's choice, "lords negate, monks combine"). Only these five gates for now:
+  - **NOT**, an evil lord. One torchbearer in, one out. When a lit torch arrives he puts it out; out of spite he lights a dark one (he always negates).
+  - **AND**, a logician monk. Two in, one out. Lights the outgoing torch only when both arrive lit (he demands consensus).
+  - **OR**, a logician monk. Two in, one out. Lights the outgoing torch if at least one arrives lit.
+  - **NAND**, a lord with an AND monk at his court: the monk decides, then the lord overturns it. He hates positive consensus: when both arrive lit, the outgoing torchbearer leaves dark; otherwise lit.
+  - **NOR**, a lord with an OR monk at his court. The outgoing torch is lit only when both arrive dark.
+  - The writer invents each character's name and title.
+- Depth (user's choice): a **lean character sheet** per gate: rule in torch terms, truth table (show 0/1 and lit/dark), personality, look (costume, silhouette, colors). Plus a short intro (a few sentences on the world rule and the three classes) and a brief torchbearer entry (personality and look, no truth table).
+- Style (user's choice): **illuminated manuscript**: parchment page, medieval fonts from Google Fonts, drop caps, and a simple **inline SVG portrait** of each character with their torch moment. Darker vellum under `prefers-color-scheme: dark`. Works at phone width (16px side gutter, no horizontal page scroll). A real `<title>`.
+- Checking: launch config `next-dev` in `.claude/launch.json` (`npm run dev`, port 3000), page `http://localhost:3000/gates`. A change to `next.config.js` needs the dev server restarted (stop the preview and start it again).
 - Git: branch `main`. Pull with `git pull --rebase`, push with `git push`.
 
 ## Next
 
-(nothing)
-
-## After Next (user request, 2026-10-31)
-
-When tasks 1–10 are done, run `/z` in `C:\Users\DomPC\Desktop\websites\sap-computer` (currently an empty folder) to create a standalone SAP-1 website there, moving the finished SAP-1 visualizer over. User's answers:
-- Stack: **Vite + React** static site (the SAP-1 code is client-only React; port the Tailwind classes and the `app/sap1/*` files, and replace Next-specific bits such as `metadata`, `next/link` and the "← home" link).
-- Git: `git init -b main` and a **new public GitHub repo** `sap-computer` on the `reservetempo` account (via `gh repo create`), pushed from there.
-- Extras: an **about/credits footer** crediting Malvino & Brown's *Digital Computer Electronics* and linking back to the main site. No landing section, no deploy config for now.
-- Also in the new project: on phones the tour's mission text sits below the diagram, so make the mission card sticky or collapsible near the panel (follow-up from task 10).
-- Still for the user to check by eye: animations with the OS reduced-motion setting on, and the zoom/animations at FAST in a visible window. The agents' browser pane was hidden, so they couldn't watch them run.
-- Then come back here for task 11 (remove `/sap1`, link the homepage to the new site's URL once the user gives it).
+1. **Gates page, styling and text.** Create `public/gates/index.html` and `public/gates/style.css`, and add the rewrite `{ source: '/gates', destination: '/gates/index.html' }` to the existing `rewrites()` array in `next.config.js` (keep the `/units` rewrite and the `/sap1` redirect). Write the full page per the shared context: title and short intro, the torchbearer entry, then NOT, AND, OR, NAND, NOR as lean character sheets with truth tables. Manuscript styling (parchment, Google Fonts, drop caps, light and dark). Leave an empty, sized portrait slot in each entry for task 2, e.g. `<figure class="portrait" data-portrait="not"></figure>` (also one for the torchbearer), styled so the layout looks right while empty. Done when `/gates` renders the whole document in both color schemes and at phone width, and `/units` still works.
+2. **Character portraits.** Fill each `figure.portrait[data-portrait=…]` slot in `public/gates/index.html` with a simple inline SVG of that character (torchbearer, NOT, AND, OR, NAND, NOR) in their torch moment: e.g. NOT pinching out a flame, AND weighing two lit torches, NAND's monk nodding while the lord snuffs the outgoing torch. Simple period line-art in the manuscript feel, each with a clear silhouette (lords vs monks vs peasant). Colors from CSS variables in `public/gates/style.css` so they work in light and dark; flames in warm colors. Each SVG has `role="img"` and a `<title>`. Any flicker animation is subtle and turned off under `prefers-reduced-motion`. Don't change the text content. Done when every slot has a portrait that reads well in both schemes and at phone width.
 
 ## Done
 
