@@ -256,6 +256,34 @@ h1 .amp { color: var(--rubric); }
   color: var(--frame);
 }
 
+/* Portrait line-art: ink outlines by default, fills set per shape from the tokens */
+.portrait svg {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.portrait .fl {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: flicker 1.7s ease-in-out infinite alternate;
+}
+.portrait .fl.f2 { animation-duration: 1.3s; animation-delay: -0.7s; }
+.portrait .glow { animation: glow 2.4s ease-in-out infinite alternate; }
+.portrait .smoke { animation: drift 3.2s ease-in-out infinite alternate; }
+@keyframes flicker {
+  0% { transform: scale(1, 1) skewX(0deg); }
+  40% { transform: scale(0.94, 1.07) skewX(-3deg); }
+  75% { transform: scale(1.04, 0.95) skewX(2deg); }
+  100% { transform: scale(0.97, 1.04) skewX(-1deg); }
+}
+@keyframes glow { from { opacity: 0.7; } to { opacity: 1; } }
+@keyframes drift { from { opacity: 0.55; transform: translateY(2px); } to { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .portrait .fl, .portrait .glow, .portrait .smoke { animation: none; }
+}
+
 .facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
