@@ -9,16 +9,11 @@
 
 ## Next
 
-- **Task 13, remove gates from the personal site** (in `dominic_my_website`, after task 12 is live).
-  - `git rm -r public/gates/`.
-  - `next.config.js`: remove the `/gates` and `/gates/play` rewrites (keep `/units`) and update the comment above them. Add permanent redirects next to the `/sap1` one: `/gates` → `https://reservetempo.github.io/logic-king/design/`, `/gates/play` → `https://reservetempo.github.io/logic-king/`, with a comment like the SAP-1 one.
-  - `app/page.jsx`: add a homepage link after the `sap-1` one (around line 104), same markup and `elementClasses`, `href="https://reservetempo.github.io/logic-king/"`, text `logic king`. The new link is now last, so give `sap-1` the same right margin the `units` link has.
-  - Grep `app/` and `public/` for any other `/gates` reference and fix it.
-  - Check: `next-dev` preview (restart it, since `next.config.js` changed): `/gates` and `/gates/play` redirect to the right URLs, the homepage link shows and works at desktop and phone width, no console errors. `npm run build` passes.
-  - Done: one commit, pushed.
+(nothing)
 
 ## Done
 
+- Task 13, remove gates from the personal site: 3c2577c. `public/gates/` deleted and its rewrites removed; `/gates` and `/gates/play` redirect (308) to https://reservetempo.github.io/logic-king/design/ and https://reservetempo.github.io/logic-king/; homepage link "logic king" after sap-1. Checked in `next-dev` at desktop and phone width (two rows of three links), `npm run build` passes.
 - Task 12, logic-king site and GitHub Page: 1dfd3a5 (in the `logic-king` repo). The game at the root and the design doc in `design/` with relative paths, links each way, `.nojekyll`, `README.md`, `.claude/launch.json`; public repo `reservetempo/logic-king` created and Pages turned on. Checked locally and live: https://reservetempo.github.io/logic-king/ and `/design/` load with no 404s or console errors. The game's notes moved to `logic-king/.claude/plan.md` (714c7b5).
 - Gates play task 4, final check and polish: 0a93fcc. Phone width, keyboard order and focus rings, dark-mode contrast, reduced motion, both runs (no clipping through the arch or the lord), console and `npm run build` all pass. Fixes: pixel ratio reapplied on resize (sharp after browser zoom), and the lord's gestures reuse one vector instead of allocating per frame. The animation was stepped by hand, not watched live (the pane was hidden), so a live look in a browser is still to do.
 - Gates play task 3, the run: c633515. New `public/gates/play/run.js`: Send walks Hob to Lord Gainsay, the lord snuffs or lights his torch at contact, Hob walks on and sparks light the beacon or fizzle; step-by-step readout, `#status` outcome, Reset at any point, reduced-motion jumps. Checked by stepping frames by hand (the pane was hidden): both outcomes, route stays on the road, five Reset timings, phone width.
