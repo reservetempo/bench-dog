@@ -32,7 +32,10 @@ As built in task 14 (2bfbdcc), for anyone writing a style:
 - `main.js` measures each figure to space and frame it, wraps it in its own parent group for layout and turning, and adds the board tiles; styles add no ground. Camera fov 30, about 3–5 units away in Close-up and 6–10 in Game view, so linear fog should end past 16.
 - `main.js` calls `obj.userData.tick(t, dt)` on any object inside a figure every frame. Set `userData.noFit` on particles and glows (left out of framing) and `userData.noOutline` on things that shouldn't get an outline. Under reduced motion `update` and ticks run once at t = 0; styles check `kit.REDUCED_MOTION` and skip particles.
 - `kit.js` exports `torch` (flame, glow, warm light, `flameTip`), `embers`, `blobShadow`, `addOutline`/`outlineAll`, `toonMat`/`toonGradient`, `jitter`, `lathe`, `raggedHem`, `mergeMeshes`, `pointIn`, `eyePair`/`paintedEye` (bead eyes, or canvas-painted anime eyes), `canvasTexture`, `gradientBackground`, `softDotTexture`, `rng`, `wobble`, `shade`, `ROLES`, `REDUCED_MOTION`.
-- `paintedEye` has never been seen on screen (styles 1–2 don't use it).
+- `paintedEye` has never been seen on screen (styles 1–4, 7–8 don't use it).
+- Framing: `main.js` fits figures from bounding-box corners, which overstates round parts (about 1.4×), so wide or big-headed figures can come out small. Style 4 works around it by flagging hat brims, its cape and the torch flame `noFit`; do the same if your figures look small (task 19 may fix the measurement in `main.js`).
+- Token budget: earlier style tasks ran 220–300k tokens, mostly screenshots and re-reads. Keep under 150k: no more than about 6 screenshots, at `scale: 0.5` unless checking fine detail, zoom into your card instead of full-page shots, and don't read back files you just wrote.
+- The Close-up | Game view choice is in `localStorage`, shared by every tab; leave it on Close-up when you finish.
 
 Working in parallel on the dump styles (tasks 15–18 run two at a time in the same checkout):
 - Edit only your own style files. Don't touch `main.js`, `kit.js`, `index.html`, `style.css`, `styles/index.js` or other styles' files; put extra helpers in your own files. If a shared file truly needs a change, stop and report it (task 18 alone may fix `paintedEye` in `kit.js`, see there).
@@ -54,23 +57,11 @@ The 10 styles (number, file id, vibe, proportions, look):
 
 ## Next
 
-### Task 15: styles 3–4 (parallel with task 17)
-
-Replace the placeholder files for styles 3 and 4 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/03-rust-scavengers.js` and `public/dump/styles/04-grim-chibi.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
-- Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
-- Done when: both styles have all four roles with the look, props and idle animation described, roles are readable in Game view, reduced motion gives static poses (`kit.REDUCED_MOTION`, no particles), no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles.
-
 ### Task 16: styles 5–6 (parallel with task 18)
 
 Replace the placeholder files for styles 5 and 6 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/05-clay-votive.js` and `public/dump/styles/06-voxel-famine.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
 - Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
 - Done when: both styles have all four roles with the look, props and idle animation described (clay stepped at about 12 fps), roles are readable in Game view, reduced motion gives static poses (`kit.REDUCED_MOTION`, no particles), no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles (for voxels, prefer merged boxes or `InstancedMesh`).
-
-### Task 17: styles 7–8 (parallel with task 15)
-
-Replace the placeholder files for styles 7 and 8 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/07-wooden-pawns.js` and `public/dump/styles/08-marionettes.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
-- Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
-- Done when: both styles have all four roles with the look, props and idle animation described, roles are readable in Game view (marionette strings and control bar must not get cut off in Close-up framing; flag them `noFit` only if that frames better), reduced motion gives static poses, no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles.
 
 ### Task 18: styles 9–10, the anime pair (parallel with task 16)
 
@@ -86,6 +77,8 @@ Check the whole `/dump` page with all 10 styles in place (see "Dump page: charac
 - Both camera views for every style: figures framed well (nothing cut off, big-head styles not cramped), roles readable in Game view, torches lit on all 10 peasants.
 - Things task 14 only checked by reading the code: reduced motion with the setting actually emulated, rendering pausing in a hidden tab, and a touch drag (pointer events with `pointerType: 'touch'`) turning the figures without scrolling getting stuck or opening the overlay.
 - Performance: only on-screen cards render, no per-frame allocations in `main.js` or the styles' `update`/`tick` functions, draw calls and triangle counts reasonable (report the `window.__dump.renderAll(t)` totals with all cards rendered; task 14 measured 453 draw calls and 28k triangles with 2 real styles). Woodcut figures are about 3.7k triangles each; trim only if cheap.
+- Framing: `main.js` fits figures from bounding-box corners, which overstates round parts (about 1.4×). Fit from a tighter measure (for example a bounding sphere or the box's real extents per axis) so figures fill their card; then check style 4 (`04-grim-chibi.js` flags hat brims, cape and flame `noFit` as a workaround) and any other style using that workaround still frames well, and remove the workaround where it's no longer needed.
+- Live motion: every task so far checked stills via `renderAll`, since the pane was hidden. Watch the animations live if the pane is visible (torch flicker, embers, ash, censer smoke in style 3, pawn hops, marionette sway, chibi hop and blinks); otherwise step several `t` values and say it was not watched live.
 - Delete `public/dump/styles/_placeholder.js` if nothing imports it any more.
 - Console errors, `npm run build` (stop the dev server first if it's running, then start it again after).
 - Keep fixes small and inside `public/dump/`; report anything bigger instead of rewriting a style.
@@ -93,6 +86,8 @@ Check the whole `/dump` page with all 10 styles in place (see "Dump page: charac
 
 ## Done
 
+- Task 15, styles 3–4: d585e21. Rust Scavengers (PBR rust, tarp, gas masks, pipe torch with embers, welding visor with glowing cross, swinging censer with smoke, rebar crown) and Grim Chibi (head ~45%, 3-step toon, ink outlines, painted tired eyes that blink, squash-and-stretch hop, monk nods off). 2.8–3.3k triangles per Rust figure, 3.2–3.8k per Chibi (half is outline hulls). Checked as stills in Close-up, Game view and overlay; reduced motion only by reading the code. Chibi brims, cape and flame flagged `noFit` to work around the framing math.
+- Task 17, styles 7–8: 3dceb0a. Wooden Pawns (lathe pieces, grain, chipped paint, big painted eyes, hop or tip-and-rock idle) and Architect's Marionettes (ball joints, cracked painted masks, gilded for the cardinal, strings to a rocking control bar, lagging limbs, spotlight and footlights before a curtain). 1.4–3.1k and 2.1–2.7k triangles per figure. Both set `scene.environment` to a small canvas env map. Checked as stills; feet stay above the floor over 40 s; reduced motion only by reading the code.
 - Task 14, dump page and first two styles: 2bfbdcc. `/dump` rewrite and homepage "dump" link; `public/dump/` with one shared renderer drawing 10 cards by scissor, Close-up | Game view switch (saved), drag to turn, overlay, `window.__dump`; `kit.js` helpers, `styles/index.js` registry (dynamic imports), styles 1 Plague Woodcut and 2 Ash & Ember, grey placeholders for 3–10 (`styles/_placeholder.js`). Checked desktop and 375 px, both views, overlay and keyboard, no console errors, build passes; 453 draw calls and 28k triangles for all cards. Used about 218k tokens, so the remaining styles were split two per task.
 - Task 13, remove gates from the personal site: 3c2577c. `public/gates/` deleted and its rewrites removed; `/gates` and `/gates/play` redirect (308) to https://reservetempo.github.io/logic-king/design/ and https://reservetempo.github.io/logic-king/; homepage link "logic king" after sap-1. Checked in `next-dev` at desktop and phone width (two rows of three links), `npm run build` passes.
 - Task 12, logic-king site and GitHub Page: 1dfd3a5 (in the `logic-king` repo). The game at the root and the design doc in `design/` with relative paths, links each way, `.nojekyll`, `README.md`, `.claude/launch.json`; public repo `reservetempo/logic-king` created and Pages turned on. Checked locally and live: https://reservetempo.github.io/logic-king/ and `/design/` load with no 404s or console errors. The game's notes moved to `logic-king/.claude/plan.md` (714c7b5).
