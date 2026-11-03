@@ -6,9 +6,9 @@
 - Projects that moved to their own GitHub Pages sites keep a permanent redirect in `next.config.js` and a homepage link in `app/page.jsx`: SAP-1 → https://reservetempo.github.io/sap-computer/ (repo `sap-computer`), and the gates game "Lords & Logicians" → https://reservetempo.github.io/logic-king/ (repo `logic-king`, in the `logic-king` folder next to this one, with its own `.claude/plan.md` holding the game's notes). Work on those happens in their own folders, not here.
 - Checking: launch config `next-dev` in `.claude/launch.json` (`npm run dev`, port 3000). A change to `next.config.js` needs the dev server restarted (stop the preview and start it again). Check the browser console for errors. `npm run build` should pass.
 - Git: branch `main`. Pull with `git pull --rebase`, push with `git push`.
-- `/dump` (tasks 14–17) is a scratch "preview dump" page: `public/dump/`, rewrite `{ source: '/dump', destination: '/dump/index.html' }`, linked from the homepage as "dump". Three.js 0.170.0 comes from jsDelivr through an import map (`https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js`, addons from `.../three@0.170.0/examples/jsm/`), no npm install. Inside JS modules, relative imports are fine (they resolve against the module's absolute URL); the HTML uses absolute paths.
+- `/dump` (tasks 14–19) is a scratch "preview dump" page: `public/dump/`, rewrite `{ source: '/dump', destination: '/dump/index.html' }`, linked from the homepage as "dump". Three.js 0.170.0 comes from jsDelivr through an import map (`https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js`, addons from `.../three@0.170.0/examples/jsm/`), no npm install. Inside JS modules, relative imports are fine (they resolve against the module's absolute URL); the HTML uses absolute paths.
 
-## Dump page: character style previews (tasks 14–17)
+## Dump page: character style previews (tasks 14–19)
 
 Goal: a page showing little 3D characters for a dark strategy/4X phone game, in 10 style categories the user can choose from. Four roles in every style: **peasant** (always holds a lit torch), **monk**, **priest**, **cardinal**. Mood: dark, one of three vibes per style: the Black Death, post-apocalypse, or poor servants of an unjust architect.
 
@@ -18,14 +18,27 @@ User's choices:
 - Proportions are built into the styles, not a toggle: some big heads/big eyes, some anime, some cartoony, the rest grim and normal.
 - Camera: a page-level switch "Close-up | Game view". Close-up (default) is a turntable: figures fill the card, each slowly turning on its own spot, drag on a card to rotate all four. Game view shows them small on a 2×2 patch of board tiles from a high tilted camera (about 55° down), as on a phone 4X map. Remember the choice in `localStorage` (wrap in try/catch).
 
-Architecture (built in task 14, used by 15 and 16):
+Architecture (built in task 14, used by tasks 15–18):
 - `public/dump/index.html`, `style.css`, `main.js`, `kit.js`, `styles/index.js` (registry), `styles/01-woodcut.js` … `styles/10-ashen-anime.js` (one file per style).
 - One `WebGLRenderer` on a fixed full-viewport canvas behind the page; each card (and the overlay) is drawn with `setViewport`/`setScissor` into its element's rect (the three.js "multiple elements" technique). Only render cards on screen; pause when the tab is hidden; cap pixel ratio at 2. Each style has its own `Scene` (own background colour, fog, lights).
 - A style module exports `{ id, name, blurb, vibe, look, setupScene(scene), build(role) → THREE.Group, update?(group, role, t, dt) }`. `role` is `'peasant' | 'monk' | 'priest' | 'cardinal'`. Figures stand on y = 0, face +z, about 1 unit tall (big-head styles may be shorter and wider). `main.js` lays them out and owns cameras, turntable, drag and board tiles; the style only builds and animates its figures and sets up its scene's lights, fog and background.
 - `kit.js` holds shared helpers: torch (handle, flame that flickers, warm `PointLight`), blob shadow (soft dark disc, no shadow maps), inverted-hull outline, toon gradient maps (2-, 3- and 5-step), simple eye builders, and `jitter(geometry, amount)` for low-poly/clay lumps. Styles may add their own helpers inside their own file.
 - Readable at game-view size: roles must be told apart by silhouette and colour (peasant: torch and hat or hood; monk: brown or grey hooded habit with rope belt; priest: black cassock with white collar; cardinal: red, the tallest, with cape and big hat and a gold cross or staff).
 - Budget: about 3k triangles per figure, no image files (small procedural canvas textures are fine), share materials within a style. Reduced motion: no turntable spin, no flicker or particles, static poses.
-- Debug hook `window.__dump = { renderAll(t), styles }` renders every card once at time `t`, for checking when the preview pane is hidden and `requestAnimationFrame` doesn't run.
+- Debug hook `window.__dump = { renderAll(t), styles, renderer }` renders every card once at time `t` and returns draw calls and triangles, for checking when the preview pane is hidden and `requestAnimationFrame` doesn't run.
+
+As built in task 14 (2bfbdcc), for anyone writing a style:
+- The API is documented at the top of `public/dump/styles/index.js`; `styles/01-woodcut.js` is the worked example. Optional extra export field `tileColor` for the Game view tiles. Styles are loaded with dynamic `import()`, so a broken style file shows a "failed to load" card instead of breaking the page.
+- `main.js` measures each figure to space and frame it, wraps it in its own parent group for layout and turning, and adds the board tiles; styles add no ground. Camera fov 30, about 3–5 units away in Close-up and 6–10 in Game view, so linear fog should end past 16.
+- `main.js` calls `obj.userData.tick(t, dt)` on any object inside a figure every frame. Set `userData.noFit` on particles and glows (left out of framing) and `userData.noOutline` on things that shouldn't get an outline. Under reduced motion `update` and ticks run once at t = 0; styles check `kit.REDUCED_MOTION` and skip particles.
+- `kit.js` exports `torch` (flame, glow, warm light, `flameTip`), `embers`, `blobShadow`, `addOutline`/`outlineAll`, `toonMat`/`toonGradient`, `jitter`, `lathe`, `raggedHem`, `mergeMeshes`, `pointIn`, `eyePair`/`paintedEye` (bead eyes, or canvas-painted anime eyes), `canvasTexture`, `gradientBackground`, `softDotTexture`, `rng`, `wobble`, `shade`, `ROLES`, `REDUCED_MOTION`.
+- `paintedEye` has never been seen on screen (styles 1–2 don't use it).
+
+Working in parallel on the dump styles (tasks 15–18 run two at a time in the same checkout):
+- Edit only your own style files. Don't touch `main.js`, `kit.js`, `index.html`, `style.css`, `styles/index.js` or other styles' files; put extra helpers in your own files. If a shared file truly needs a change, stop and report it (task 18 alone may fix `paintedEye` in `kit.js`, see there).
+- Preview: reuse the running `next-dev` server (preview_start with name "next-dev" reuses it; never preview_stop). Open your own tab with `tabs_create` and pass its `tabId` to every browser call; don't front or close other tabs.
+- Skip `npm run build`: the style files are static files in `public/`, and two builds at once would clash with each other and the dev server. Task 19 runs the build.
+- Git: never `git add`. Commit only your files with `git commit -m "<message>" -- <your files>`, which leaves anything another agent has staged or changed alone. If git says `index.lock` exists, wait a few seconds and retry. Then `git push`. Only if the push is rejected because the remote moved, run `git pull --rebase --autostash` and `git push` again; stop and report on any conflict. Never force-push.
 
 The 10 styles (number, file id, vibe, proportions, look):
 1. **Plague Woodcut** (`01-woodcut`), Black Death, grim. Slim, slightly hunched. Flat 2-step shading, parchment-cream faces and hands, sepia and soot cloth, thick black ink outlines, a few dark bands on robes like woodcut hatching, parchment-grey fog. Peasant: ragged tunic, coif, bandaged arm, torch. Monk: grey-black hooded habit, rope belt, rosary. Priest: black cassock, white stole, small book. Cardinal: crimson cape and wide galero hat with tassels (the only strong colour besides fire), gold cross.
@@ -41,42 +54,46 @@ The 10 styles (number, file id, vibe, proportions, look):
 
 ## Next
 
-### Task 14: dump page, renderer and first two styles
+### Task 15: styles 3–4 (parallel with task 17)
 
-Build the `/dump` page and its shared rendering, following "Dump page: character style previews" above (read that section and the shared context first).
-- Add the rewrite `{ source: '/dump', destination: '/dump/index.html' }` to `next.config.js` (restart the dev server after). Add a "dump" link after "logic king" in `app/page.jsx`, styled like the other links; check the homepage links still look tidy at phone width with seven links.
-- Create `public/dump/index.html` (dark page, title "Dump", a short header line saying it's a preview dump of character styles for a dark 4X game, the Close-up | Game view switch, the grid of 10 cards, the overlay), `style.css`, `main.js` (renderer, scissor rendering, card layout, turntable, drag, game-view board tiles, overlay, `localStorage` choice, reduced motion, `window.__dump`), `kit.js` (shared helpers listed above) and `styles/index.js` (registry of all 10 in order).
-- Fully build styles 1 (`styles/01-woodcut.js`) and 2 (`styles/02-ash-ember.js`).
-- For styles 3–10 create placeholder files with the right `id`, `name`, `blurb`, `vibe` and `look` and a simple grey stand-in figure per role (the peasant still gets the kit torch), so the page works end to end. Tasks 15 and 16 replace them.
-- Canvas is `aria-hidden`; cards are focusable buttons with accessible names (style name and blurb); visible focus rings.
-- Done when: `/dump` loads with no console errors, all 10 cards render (2 real styles, 8 placeholders), the overlay and both camera views work, it's fine at phone width (375 px) with no horizontal scroll, the homepage link works, and `npm run build` passes. If the pane is hidden and frames don't run, check with `window.__dump.renderAll(t)` and a screenshot.
+Replace the placeholder files for styles 3 and 4 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/03-rust-scavengers.js` and `public/dump/styles/04-grim-chibi.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
+- Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
+- Done when: both styles have all four roles with the look, props and idle animation described, roles are readable in Game view, reduced motion gives static poses (`kit.REDUCED_MOTION`, no particles), no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles.
 
-### Task 15: styles 3–6 (parallel with task 16)
+### Task 16: styles 5–6 (parallel with task 18)
 
-Replace the placeholder style files for styles 3–6 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/03-rust-scavengers.js`, `04-grim-chibi.js`, `05-clay-votive.js`, `06-voxel-famine.js`. Read `public/dump/kit.js` and `public/dump/styles/01-woodcut.js` first for the style API and helpers.
-- Edit only those four files. Don't change `main.js`, `kit.js`, `index.html`, `style.css` or `styles/index.js` (task 16 runs at the same time); put any extra helpers inside your own style files. If a style truly needs a change in a shared file, stop and report it instead.
-- Another agent may be previewing at the same time: if the `next-dev` server is already running, reuse it, don't stop it, and use your own browser tab (`tabs_create`, then pass its `tabId`).
-- Done when: each of the four styles has all four roles with the look, props and idle animation described, roles are readable in Game view, reduced motion gives static poses, no console errors, and `npm run build` passes. Check each card in Close-up and Game view (use `window.__dump.renderAll(t)` if frames don't run).
+Replace the placeholder files for styles 5 and 6 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/05-clay-votive.js` and `public/dump/styles/06-voxel-famine.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
+- Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
+- Done when: both styles have all four roles with the look, props and idle animation described (clay stepped at about 12 fps), roles are readable in Game view, reduced motion gives static poses (`kit.REDUCED_MOTION`, no particles), no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles (for voxels, prefer merged boxes or `InstancedMesh`).
 
-### Task 16: styles 7–10 (parallel with task 15)
+### Task 17: styles 7–8 (parallel with task 15)
 
-Replace the placeholder style files for styles 7–10 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/07-wooden-pawns.js`, `08-marionettes.js`, `09-anime-penitents.js`, `10-ashen-anime.js`. Read `public/dump/kit.js` and `public/dump/styles/01-woodcut.js` first for the style API and helpers.
-- Edit only those four files. Don't change `main.js`, `kit.js`, `index.html`, `style.css` or `styles/index.js` (task 15 runs at the same time); put any extra helpers inside your own style files. If a style truly needs a change in a shared file, stop and report it instead.
-- Another agent may be previewing at the same time: if the `next-dev` server is already running, reuse it, don't stop it, and use your own browser tab (`tabs_create`, then pass its `tabId`).
-- Done when: each of the four styles has all four roles with the look, props and idle animation described, roles are readable in Game view, reduced motion gives static poses, no console errors, and `npm run build` passes. Check each card in Close-up and Game view (use `window.__dump.renderAll(t)` if frames don't run).
+Replace the placeholder files for styles 7 and 8 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/07-wooden-pawns.js` and `public/dump/styles/08-marionettes.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
+- Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
+- Done when: both styles have all four roles with the look, props and idle animation described, roles are readable in Game view (marionette strings and control bar must not get cut off in Close-up framing; flag them `noFit` only if that frames better), reduced motion gives static poses, no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles.
 
-### Task 17: dump page final check and polish
+### Task 18: styles 9–10, the anime pair (parallel with task 16)
+
+Replace the placeholder files for styles 9 and 10 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/09-anime-penitents.js` and `public/dump/styles/10-ashen-anime.js`. Read the API notes above, the comment at the top of `public/dump/styles/index.js`, and `public/dump/styles/01-woodcut.js` as the worked example; grep `public/dump/kit.js` for the helpers you need rather than reading it whole.
+- Follow "Working in parallel on the dump styles" above (own files only, own browser tab, no build, commit with `git commit -- <files>`).
+- Exception: these are the first styles to use `kit.paintedEye`. If it's broken or can't give big glossy anime eyes, you may fix `paintedEye` (and only that function) in `public/dump/kit.js`, keeping its signature compatible; include `kit.js` in your commit and say so in your report. No other task uses it.
+- Done when: both styles have all four roles with the look, props and idle animation described, the eyes read clearly as anime eyes in Close-up and the overlay, roles are readable in Game view, reduced motion gives static poses (`kit.REDUCED_MOTION`, no ash particles), no console errors, and both cards look right in Close-up, Game view and the overlay (use `window.__dump.renderAll(t)` if frames don't run). Keep each figure near 3k triangles.
+
+### Task 19: dump page final check and polish
 
 Check the whole `/dump` page with all 10 styles in place (see "Dump page: character style previews" above) and fix what's wrong.
 - Phone width (375 px) and desktop: no horizontal scroll, cards in order 1–10, labels and tags readable, overlay works by touch-style click, keyboard (Tab, Enter/Space, Escape) and close button.
 - Both camera views for every style: figures framed well (nothing cut off, big-head styles not cramped), roles readable in Game view, torches lit on all 10 peasants.
-- Performance: only on-screen cards render, rendering pauses in a hidden tab, no per-frame allocations in `main.js` or the styles' `update` functions, draw calls and triangle counts reasonable (report `renderer.info` totals with all cards rendered).
-- Reduced motion, console errors, `npm run build`.
+- Things task 14 only checked by reading the code: reduced motion with the setting actually emulated, rendering pausing in a hidden tab, and a touch drag (pointer events with `pointerType: 'touch'`) turning the figures without scrolling getting stuck or opening the overlay.
+- Performance: only on-screen cards render, no per-frame allocations in `main.js` or the styles' `update`/`tick` functions, draw calls and triangle counts reasonable (report the `window.__dump.renderAll(t)` totals with all cards rendered; task 14 measured 453 draw calls and 28k triangles with 2 real styles). Woodcut figures are about 3.7k triangles each; trim only if cheap.
+- Delete `public/dump/styles/_placeholder.js` if nothing imports it any more.
+- Console errors, `npm run build` (stop the dev server first if it's running, then start it again after).
 - Keep fixes small and inside `public/dump/`; report anything bigger instead of rewriting a style.
-- Done when: all of the above pass; report what was fixed and the `renderer.info` numbers.
+- Done when: all of the above pass; report what was fixed and the draw-call and triangle numbers.
 
 ## Done
 
+- Task 14, dump page and first two styles: 2bfbdcc. `/dump` rewrite and homepage "dump" link; `public/dump/` with one shared renderer drawing 10 cards by scissor, Close-up | Game view switch (saved), drag to turn, overlay, `window.__dump`; `kit.js` helpers, `styles/index.js` registry (dynamic imports), styles 1 Plague Woodcut and 2 Ash & Ember, grey placeholders for 3–10 (`styles/_placeholder.js`). Checked desktop and 375 px, both views, overlay and keyboard, no console errors, build passes; 453 draw calls and 28k triangles for all cards. Used about 218k tokens, so the remaining styles were split two per task.
 - Task 13, remove gates from the personal site: 3c2577c. `public/gates/` deleted and its rewrites removed; `/gates` and `/gates/play` redirect (308) to https://reservetempo.github.io/logic-king/design/ and https://reservetempo.github.io/logic-king/; homepage link "logic king" after sap-1. Checked in `next-dev` at desktop and phone width (two rows of three links), `npm run build` passes.
 - Task 12, logic-king site and GitHub Page: 1dfd3a5 (in the `logic-king` repo). The game at the root and the design doc in `design/` with relative paths, links each way, `.nojekyll`, `README.md`, `.claude/launch.json`; public repo `reservetempo/logic-king` created and Pages turned on. Checked locally and live: https://reservetempo.github.io/logic-king/ and `/design/` load with no 404s or console errors. The game's notes moved to `logic-king/.claude/plan.md` (714c7b5).
 - Gates play task 4, final check and polish: 0a93fcc. Phone width, keyboard order and focus rings, dark-mode contrast, reduced motion, both runs (no clipping through the arch or the lord), console and `npm run build` all pass. Fixes: pixel ratio reapplied on resize (sharp after browser zoom), and the lord's gestures reuse one vector instead of allocating per frame. The animation was stepped by hand, not watched live (the pane was hidden), so a live look in a browser is still to do.
