@@ -6,10 +6,74 @@
 - Projects that moved to their own GitHub Pages sites keep a permanent redirect in `next.config.js` and a homepage link in `app/page.jsx`: SAP-1 → https://reservetempo.github.io/sap-computer/ (repo `sap-computer`), and the gates game "Lords & Logicians" → https://reservetempo.github.io/logic-king/ (repo `logic-king`, in the `logic-king` folder next to this one, with its own `.claude/plan.md` holding the game's notes). Work on those happens in their own folders, not here.
 - Checking: launch config `next-dev` in `.claude/launch.json` (`npm run dev`, port 3000). A change to `next.config.js` needs the dev server restarted (stop the preview and start it again). Check the browser console for errors. `npm run build` should pass.
 - Git: branch `main`. Pull with `git pull --rebase`, push with `git push`.
+- `/dump` (tasks 14–17) is a scratch "preview dump" page: `public/dump/`, rewrite `{ source: '/dump', destination: '/dump/index.html' }`, linked from the homepage as "dump". Three.js 0.170.0 comes from jsDelivr through an import map (`https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js`, addons from `.../three@0.170.0/examples/jsm/`), no npm install. Inside JS modules, relative imports are fine (they resolve against the module's absolute URL); the HTML uses absolute paths.
+
+## Dump page: character style previews (tasks 14–17)
+
+Goal: a page showing little 3D characters for a dark strategy/4X phone game, in 10 style categories the user can choose from. Four roles in every style: **peasant** (always holds a lit torch), **monk**, **priest**, **cardinal**. Mood: dark, one of three vibes per style: the Black Death, post-apocalypse, or poor servants of an unjust architect.
+
+User's choices:
+- Lives at `/dump` and is linked from the homepage.
+- Layout: a scrolling grid of 10 cards (1 column on phones, 2 on wide screens). Each card shows all four roles in one style, with the style's number, name, a one-line blurb, a vibe tag and a proportions tag, and role labels under the figures. Tap/click (or Enter/Space) a card to open it big in an overlay (close button, Escape, click outside).
+- Proportions are built into the styles, not a toggle: some big heads/big eyes, some anime, some cartoony, the rest grim and normal.
+- Camera: a page-level switch "Close-up | Game view". Close-up (default) is a turntable: figures fill the card, each slowly turning on its own spot, drag on a card to rotate all four. Game view shows them small on a 2×2 patch of board tiles from a high tilted camera (about 55° down), as on a phone 4X map. Remember the choice in `localStorage` (wrap in try/catch).
+
+Architecture (built in task 14, used by 15 and 16):
+- `public/dump/index.html`, `style.css`, `main.js`, `kit.js`, `styles/index.js` (registry), `styles/01-woodcut.js` … `styles/10-ashen-anime.js` (one file per style).
+- One `WebGLRenderer` on a fixed full-viewport canvas behind the page; each card (and the overlay) is drawn with `setViewport`/`setScissor` into its element's rect (the three.js "multiple elements" technique). Only render cards on screen; pause when the tab is hidden; cap pixel ratio at 2. Each style has its own `Scene` (own background colour, fog, lights).
+- A style module exports `{ id, name, blurb, vibe, look, setupScene(scene), build(role) → THREE.Group, update?(group, role, t, dt) }`. `role` is `'peasant' | 'monk' | 'priest' | 'cardinal'`. Figures stand on y = 0, face +z, about 1 unit tall (big-head styles may be shorter and wider). `main.js` lays them out and owns cameras, turntable, drag and board tiles; the style only builds and animates its figures and sets up its scene's lights, fog and background.
+- `kit.js` holds shared helpers: torch (handle, flame that flickers, warm `PointLight`), blob shadow (soft dark disc, no shadow maps), inverted-hull outline, toon gradient maps (2-, 3- and 5-step), simple eye builders, and `jitter(geometry, amount)` for low-poly/clay lumps. Styles may add their own helpers inside their own file.
+- Readable at game-view size: roles must be told apart by silhouette and colour (peasant: torch and hat or hood; monk: brown or grey hooded habit with rope belt; priest: black cassock with white collar; cardinal: red, the tallest, with cape and big hat and a gold cross or staff).
+- Budget: about 3k triangles per figure, no image files (small procedural canvas textures are fine), share materials within a style. Reduced motion: no turntable spin, no flicker or particles, static poses.
+- Debug hook `window.__dump = { renderAll(t), styles }` renders every card once at time `t`, for checking when the preview pane is hidden and `requestAnimationFrame` doesn't run.
+
+The 10 styles (number, file id, vibe, proportions, look):
+1. **Plague Woodcut** (`01-woodcut`), Black Death, grim. Slim, slightly hunched. Flat 2-step shading, parchment-cream faces and hands, sepia and soot cloth, thick black ink outlines, a few dark bands on robes like woodcut hatching, parchment-grey fog. Peasant: ragged tunic, coif, bandaged arm, torch. Monk: grey-black hooded habit, rope belt, rosary. Priest: black cassock, white stole, small book. Cardinal: crimson cape and wide galero hat with tassels (the only strong colour besides fire), gold cross.
+2. **Ash & Ember** (`02-ash-ember`), post-apocalypse, grim. Gaunt and hunched. Faceted low-poly (flat shading, few segments, jittered vertices), ash greys and charcoal, cold blue moonlight with the torch as the only warm light, embers (`Points`) drifting up from the torch. Peasant: scarf over face, patched cloak. Monk: tattered hood, hand bell. Priest: soot-stained cassock, cracked censer. Cardinal: faded red robe, broken tall hat, staff.
+3. **Rust Scavengers** (`03-rust-scavengers`), post-apocalypse, grim. `MeshStandardMaterial`: rusted metal, tarp and canvas (olive, khaki), goggles and gas masks with round filters, smog fog. Peasant: tarp poncho, goggles, torch made from a pipe and burning rag. Monk: gas mask under a hood, bottle-cap rosary. Priest: welding-style visor with a cross cut out, scrap censer on a chain. Cardinal: red tarp cape, crown of rebar, pipe staff.
+4. **Grim Chibi** (`04-grim-chibi`), Black Death, big heads, cartoony. Head about 45% of height, stubby limbs. 3-step toon shading, black outlines, muted dark pastels, tired eyes with dark rings and small pupils, bandages and plague spots, bouncy idle. Peasant: straw hat, patched tunic, oversized torch. Monk: round tonsured head, big brown hood down. Priest: black cassock, tall white collar. Cardinal: huge round red galero, tiny gold cross, smug half-lidded eyes.
+5. **Clay Votive** (`05-clay-votive`), Black Death, big heads, cartoony. Stop-motion plasticine: lumpy rounded forms (vertex noise), rough waxy `MeshStandardMaterial`, umber, ochre and rust palette, black bead eyes, visible seams. Animation is stepped at about 12 fps ("on twos"); the clay flame flickers by swapping shapes. Peasant: sack hood, clay torch. Monk: grey, droopy hood. Priest: black with a white clay collar. Cardinal: red, wobbly tall hat.
+6. **Voxel Famine** (`06-voxel-famine`), post-apocalypse, big blocky heads, cartoony. Built from small cubes (merged boxes or `InstancedMesh`), head about 40% of height, sickly green-grey and mud-brown palette, darker voxels at edges for fake occlusion, voxel eyes. Peasant: voxel torch whose flame cubes flicker. Monk: blocky hood. Priest: collar. Cardinal: stacked red voxel hat. Keep it original: don't copy any specific game's character look.
+7. **Wooden Pawns** (`07-wooden-pawns`), unjust architect, cartoony, big painted eyes. Lathe-turned board pieces (`LatheGeometry`) on round weighted bases, tiny peg arms or none, big painted oval eyes, varnished wood with grain bands and chipped paint. Peasant: pale wood, painted rags, torch peg. Monk: dark stain, carved hood. Priest: black paint, white band. Cardinal: tallest, red lacquer, gold-leaf trim, hat. Idle: a small hop or tilt now and then, as if moved by an unseen hand.
+8. **Architect's Marionettes** (`08-marionettes`), unjust architect, oversized carved heads with wide painted eyes. Jointed puppets: ball joints at shoulders, elbows and knees, segmented limbs, cracked painted wooden masks, cloth costumes, thin strings (`Line`) from head and hands up to a wooden control bar just above the figure. Idle: dangling sway, limbs swing with lag. Dim theatre spotlight from above. Peasant: torch tied to the hand. Cardinal: gilded mask.
+9. **Anime Penitents** (`09-anime-penitents`), unjust architect, anime. Slim with long legs, heads slightly large, big glossy anime eyes (large irises with white highlights), sharp 2-step cel shading, strong rim light, clean outlines, slate-blue dusk. Peasant: spiky messy hair, headband, torch. Monk: hood, serene closed eyes. Priest: long tied-back hair. Cardinal: long flowing crimson cape with gold trim, cold narrow eyes. Cape and cloth tails sway.
+10. **Ashen Anime** (`10-ashen-anime`), post-apocalypse, chibi anime. Oversized heads (about 2.5 heads tall), huge watery eyes with several highlights, tiny mouths, soft 5-step gradient shading, dusty rose, ash blue and bone white, ash flakes (`Points`) falling. Peasant: oversized scarf, little torch. Monk: big floppy hood. Priest: long black coat, white collar. Cardinal: a huge red hat that dwarfs them, sad eyes. Gentle float and sway.
 
 ## Next
 
-(nothing)
+### Task 14: dump page, renderer and first two styles
+
+Build the `/dump` page and its shared rendering, following "Dump page: character style previews" above (read that section and the shared context first).
+- Add the rewrite `{ source: '/dump', destination: '/dump/index.html' }` to `next.config.js` (restart the dev server after). Add a "dump" link after "logic king" in `app/page.jsx`, styled like the other links; check the homepage links still look tidy at phone width with seven links.
+- Create `public/dump/index.html` (dark page, title "Dump", a short header line saying it's a preview dump of character styles for a dark 4X game, the Close-up | Game view switch, the grid of 10 cards, the overlay), `style.css`, `main.js` (renderer, scissor rendering, card layout, turntable, drag, game-view board tiles, overlay, `localStorage` choice, reduced motion, `window.__dump`), `kit.js` (shared helpers listed above) and `styles/index.js` (registry of all 10 in order).
+- Fully build styles 1 (`styles/01-woodcut.js`) and 2 (`styles/02-ash-ember.js`).
+- For styles 3–10 create placeholder files with the right `id`, `name`, `blurb`, `vibe` and `look` and a simple grey stand-in figure per role (the peasant still gets the kit torch), so the page works end to end. Tasks 15 and 16 replace them.
+- Canvas is `aria-hidden`; cards are focusable buttons with accessible names (style name and blurb); visible focus rings.
+- Done when: `/dump` loads with no console errors, all 10 cards render (2 real styles, 8 placeholders), the overlay and both camera views work, it's fine at phone width (375 px) with no horizontal scroll, the homepage link works, and `npm run build` passes. If the pane is hidden and frames don't run, check with `window.__dump.renderAll(t)` and a screenshot.
+
+### Task 15: styles 3–6 (parallel with task 16)
+
+Replace the placeholder style files for styles 3–6 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/03-rust-scavengers.js`, `04-grim-chibi.js`, `05-clay-votive.js`, `06-voxel-famine.js`. Read `public/dump/kit.js` and `public/dump/styles/01-woodcut.js` first for the style API and helpers.
+- Edit only those four files. Don't change `main.js`, `kit.js`, `index.html`, `style.css` or `styles/index.js` (task 16 runs at the same time); put any extra helpers inside your own style files. If a style truly needs a change in a shared file, stop and report it instead.
+- Another agent may be previewing at the same time: if the `next-dev` server is already running, reuse it, don't stop it, and use your own browser tab (`tabs_create`, then pass its `tabId`).
+- Done when: each of the four styles has all four roles with the look, props and idle animation described, roles are readable in Game view, reduced motion gives static poses, no console errors, and `npm run build` passes. Check each card in Close-up and Game view (use `window.__dump.renderAll(t)` if frames don't run).
+
+### Task 16: styles 7–10 (parallel with task 15)
+
+Replace the placeholder style files for styles 7–10 with the real styles, as described in "Dump page: character style previews" above: `public/dump/styles/07-wooden-pawns.js`, `08-marionettes.js`, `09-anime-penitents.js`, `10-ashen-anime.js`. Read `public/dump/kit.js` and `public/dump/styles/01-woodcut.js` first for the style API and helpers.
+- Edit only those four files. Don't change `main.js`, `kit.js`, `index.html`, `style.css` or `styles/index.js` (task 15 runs at the same time); put any extra helpers inside your own style files. If a style truly needs a change in a shared file, stop and report it instead.
+- Another agent may be previewing at the same time: if the `next-dev` server is already running, reuse it, don't stop it, and use your own browser tab (`tabs_create`, then pass its `tabId`).
+- Done when: each of the four styles has all four roles with the look, props and idle animation described, roles are readable in Game view, reduced motion gives static poses, no console errors, and `npm run build` passes. Check each card in Close-up and Game view (use `window.__dump.renderAll(t)` if frames don't run).
+
+### Task 17: dump page final check and polish
+
+Check the whole `/dump` page with all 10 styles in place (see "Dump page: character style previews" above) and fix what's wrong.
+- Phone width (375 px) and desktop: no horizontal scroll, cards in order 1–10, labels and tags readable, overlay works by touch-style click, keyboard (Tab, Enter/Space, Escape) and close button.
+- Both camera views for every style: figures framed well (nothing cut off, big-head styles not cramped), roles readable in Game view, torches lit on all 10 peasants.
+- Performance: only on-screen cards render, rendering pauses in a hidden tab, no per-frame allocations in `main.js` or the styles' `update` functions, draw calls and triangle counts reasonable (report `renderer.info` totals with all cards rendered).
+- Reduced motion, console errors, `npm run build`.
+- Keep fixes small and inside `public/dump/`; report anything bigger instead of rewriting a style.
+- Done when: all of the above pass; report what was fixed and the `renderer.info` numbers.
 
 ## Done
 
