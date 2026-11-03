@@ -11,10 +11,11 @@ const nextConfig = {
       },
     ],
   },
-  // Plain HTML pages in public/: Unit Tree at /units
+  // Plain HTML pages in public/: Unit Tree at /units, character style dump at /dump
   async rewrites() {
     return [
       { source: '/units', destination: '/units/index.html' },
+      { source: '/dump', destination: '/dump/index.html' },
     ];
   },
   // SAP-1 and the gates game (Lords & Logicians) moved to their own sites;

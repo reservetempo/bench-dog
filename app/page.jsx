@@ -108,8 +108,13 @@ export default function Home() {
 
           <a
             href="https://reservetempo.github.io/logic-king/"
-            className={`${elementClasses} md:ml-0 md:mr-0`}
+            className={`${elementClasses} mr-4 md:ml-0 md:mr-0`}
           >logic king</a>
+
+          <a
+            href="/dump"
+            className={`${elementClasses} md:ml-0 md:mr-0`}
+          >dump</a>
         </div>
       </header>
 

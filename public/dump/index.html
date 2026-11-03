@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Dump</title>
+  <link rel="stylesheet" href="/dump/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="gl" aria-hidden="true"></canvas>
+
+  <header class="top">
+    <div class="top-inner">
+      <h1><a href="/" class="home" aria-label="Home">dump</a></h1>
+      <p class="lede">A preview dump of little character styles for a dark 4X game: peasant, monk, priest and cardinal in ten looks. Tap a card to see it big.</p>
+      <div class="switch" role="group" aria-label="Camera">
+        <button type="button" data-view="close" aria-pressed="true">Close-up</button>
+        <button type="button" data-view="game" aria-pressed="false">Game view</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="grid" class="grid"></div>
+    <p id="status" class="status" role="status"></p>
+  </main>
+
+  <div id="overlay" class="overlay" hidden>
+    <div class="backdrop"></div>
+    <div class="overlay-box" role="dialog" aria-modal="true" aria-labelledby="ov-title">
+      <div class="overlay-head">
+        <div>
+          <h2 id="ov-title"></h2>
+          <p id="ov-blurb" class="blurb"></p>
+          <p id="ov-tags" class="tags"></p>
+        </div>
+        <button type="button" id="ov-close" class="close" aria-label="Close">&times;</button>
+      </div>
+      <div id="ov-view" class="view view-big"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/dump/main.js"></script>
+</body>
+</html>

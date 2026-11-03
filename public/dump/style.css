@@ -1,0 +1,238 @@
+:root {
+  --bg: #0e0d0c;
+  --panel: #171513;
+  --line: #2c2824;
+  --text: #e6ddd0;
+  --muted: #9a8f80;
+  --accent: #e0893a;
+  --focus: #f2b25c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+html.ov-open { overflow: hidden; }
+
+body {
+  margin: 0;
+  color: var(--text);
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+/* One shared WebGL canvas behind the page; cards are see-through where figures draw. */
+#gl {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+html.ov-open #gl { z-index: 20; }
+
+.top, main { position: relative; z-index: 1; }
+
+.top { border-bottom: 1px solid var(--line); background: var(--bg); }
+.top-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 16px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+.top h1 { margin: 0; font-size: 26px; letter-spacing: 0.02em; }
+.home { color: var(--text); text-decoration: none; }
+.home:hover { color: var(--accent); }
+.lede { margin: 0; flex: 1 1 320px; color: var(--muted); font-size: 14px; }
+
+.switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--panel);
+}
+.switch button {
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.switch button[aria-pressed="true"] { background: #2e2924; color: var(--text); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 48px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 820px) {
+  .grid { grid-template-columns: 1fr 1fr; gap: 20px; }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.card:hover { border-color: #4a4239; }
+
+.card-head, .blurb {
+  display: flex;
+  background: var(--panel);
+}
+.card-head {
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.num { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+.name { font-weight: 600; font-size: 16px; }
+.card .tags { margin-left: auto; }
+.blurb {
+  padding: 8px 12px 10px;
+  color: var(--muted);
+  font-size: 13.5px;
+  border-top: 1px solid var(--line);
+}
+
+.tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.tag {
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid #3a342e;
+  color: #c9bdae;
+  white-space: nowrap;
+}
+.tag.v-plague { border-color: #5b4a2c; color: #d9bf8a; }
+.tag.v-ash { border-color: #3c4a5a; color: #a9bfd6; }
+.tag.v-arch { border-color: #5a3a3a; color: #d9a3a3; }
+
+/* The transparent hole the renderer draws into. */
+.view {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  touch-action: pan-y;
+  overflow: hidden;
+}
+
+.role {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: #e9e0d2;
+  background: rgba(10, 9, 8, 0.62);
+  padding: 3px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.role.placed { visibility: visible; }
+html[data-view="game"] .role { font-size: 10px; padding: 2px 5px; background: rgba(10, 9, 8, 0.5); }
+
+.broken {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--panel);
+}
+
+.status { color: var(--muted); text-align: center; }
+.status:empty { display: none; }
+
+.card:focus-visible, .switch button:focus-visible, .close:focus-visible, .home:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Overlay: backdrop (z 10) < canvas while open (z 20) < box (z 30). */
+.overlay[hidden] { display: none; }
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(6, 5, 5, 0.86);
+}
+.overlay-box {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #3a342e;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.overlay-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.overlay-head > div { flex: 1; min-width: 0; }
+.overlay-head h2 { margin: 0 0 2px; font-size: 18px; }
+.overlay-head .blurb { padding: 0; border: 0; margin: 0 0 6px; }
+.overlay-head .tags { display: flex; margin: 0; }
+.close {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--text);
+  background: #241f1b;
+  border: 1px solid #3a342e;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.close:hover { background: #2e2924; }
+.view-big {
+  aspect-ratio: auto;
+  height: min(70vh, 56vw);
+}
+@media (max-width: 640px) {
+  .view-big { height: min(68vh, 118vw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
