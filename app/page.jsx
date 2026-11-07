@@ -113,8 +113,13 @@ export default function Home() {
 
           <a
             href="/dump"
-            className={`${elementClasses} md:ml-0 md:mr-0`}
+            className={`${elementClasses} mr-4 md:ml-0 md:mr-0`}
           >dump</a>
+
+          <a
+            href="https://reservetempo.github.io/html-dump/"
+            className={`${elementClasses} md:ml-0 md:mr-0`}
+          >html dump</a>
         </div>
       </header>
 
