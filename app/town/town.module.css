@@ -1,0 +1,423 @@
+/* The voxel town homepage: a full-window 3D view with pixel-font paper UI on top. */
+
+.root {
+  --ink: #1b1f24;
+  --paper: #ffffff;
+  --bar-h: 30px;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #bfdcf2;
+  color: var(--ink);
+  color-scheme: light;
+  font-size: 14px;
+  line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Top bar */
+
+.bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 5;
+  height: var(--bar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--paper);
+  border-bottom: 2px solid var(--ink);
+  user-select: none;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.crumbHome {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 4px;
+  margin-left: -4px;
+}
+
+.crumbHome:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.sep {
+  opacity: 0.5;
+}
+
+.crumbArea {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weather {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.icon {
+  display: inline-flex;
+  padding: 2px;
+  background: #2c3f63;
+  border: 1px solid var(--ink);
+}
+
+.desc {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.desc::before {
+  content: '·';
+  opacity: 0.5;
+}
+
+.temp {
+  font-weight: 700;
+}
+
+@media (max-width: 560px) {
+  .city {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .descText {
+    display: none;
+  }
+}
+
+/* Floating tags */
+
+.tags {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin-top: -7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px 4px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 rgba(27, 31, 36, 0.35);
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  will-change: transform;
+}
+
+/* The little pointer under each tag. */
+.tag::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 8px;
+  height: 5px;
+  margin-left: -4px;
+  background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.tag:hover,
+.tagOn {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.tag[hidden] {
+  display: none;
+}
+
+.areaTag {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 8px 5px;
+}
+
+.count {
+  min-width: 18px;
+  padding: 0 4px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  text-align: center;
+}
+
+.areaTag:hover .count {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--ink);
+}
+
+/* Building card */
+
+.card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  width: 260px;
+  padding: 10px 12px 12px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0 rgba(27, 31, 36, 0.4);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardKind {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+
+.cardClose {
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px 0 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.cardClose:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.cardTitle {
+  margin: 4px 0 2px;
+  font-size: 20px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.cardHref {
+  margin: 0 0 10px;
+  font-size: 12px;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+
+.visit {
+  display: inline-flex;
+  gap: 6px;
+  padding: 5px 12px 6px;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+}
+
+.visit:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.cardList {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cardList li {
+  padding: 3px 0;
+}
+
+.cardList a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cardList ul {
+  list-style: none;
+  padding-left: 12px;
+}
+
+@media (max-width: 720px) {
+  .card {
+    position: absolute;
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: 64px;
+    width: auto;
+    transform: none !important;
+  }
+}
+
+/* Map controls and hint */
+
+.controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 4px;
+}
+
+.ctrl {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 rgba(27, 31, 36, 0.35);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.ctrl:hover {
+  background: #fff3b0;
+}
+
+.ctrl:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 rgba(27, 31, 36, 0.35);
+}
+
+.hint {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  max-width: calc(100% - 220px);
+  margin: 0;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid var(--ink);
+  font-size: 12px;
+  transition: opacity 0.6s;
+  pointer-events: none;
+}
+
+.hintGone {
+  opacity: 0;
+}
+
+@media (max-width: 480px) {
+  .hint {
+    bottom: 60px;
+    max-width: calc(100% - 24px);
+  }
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 16px;
+}
+
+/* Shown when WebGL isn't available. */
+.fallback {
+  position: absolute;
+  inset: var(--bar-h) 0 0 0;
+  z-index: 6;
+  overflow: auto;
+  padding: 24px 16px;
+  background: #bfdcf2;
+}
+
+.fallback h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.fallback h3 {
+  margin: 16px 0 6px;
+  font-weight: 700;
+}
+
+.fallback a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.fallback ul ul {
+  padding-left: 16px;
+}
+
+.root button:focus-visible,
+.root a:focus-visible {
+  outline: 2px dashed var(--ink);
+  outline-offset: 3px;
+}
+
+.tag:focus-visible {
+  outline-color: #fff;
+  box-shadow: 0 0 0 4px var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint {
+    transition: none;
+  }
+}

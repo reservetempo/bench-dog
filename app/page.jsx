@@ -1,30 +1,13 @@
 // /app/page.jsx
+// The homepage is a voxel town: each folder in app/desktop/tree.json is an area and each
+// link in it is a building (see app/town/). Add a link with scripts/add-link.mjs.
 
-import { STYLE_CONFIG } from './config/styles';
+import { Pixelify_Sans } from 'next/font/google';
+import Town from './town/Town';
+import tree from './desktop/tree.json';
 
-const LINKS = [
-  { href: '/archive', label: 'archive' },
-  { href: '/sequencer', label: 'sequencer' },
-  { href: '/blog', label: 'blog' },
-  { href: '/units', label: 'units' },
-  { href: 'https://reservetempo.github.io/sap-computer/', label: 'sap-1' },
-  { href: 'https://reservetempo.github.io/logic-king/', label: 'logic king' },
-  { href: '/dump', label: 'dump' },
-  { href: 'https://reservetempo.github.io/html-dump/', label: 'html dump' },
-];
+const pixel = Pixelify_Sans({ subsets: ['latin'], display: 'swap' });
 
 export default function Home() {
-  return (
-    <div className="min-h-screen font-sans bg-[#ff0000]" style={{ color: STYLE_CONFIG.brandColor }}>
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <ul className="flex flex-col gap-2">
-          {LINKS.map(({ href, label }) => (
-            <li key={href}>
-              <a href={href} className={STYLE_CONFIG.navLinkClasses}>{label}</a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </div>
-  );
+  return <Town tree={tree} fontClass={pixel.className} />;
 }
