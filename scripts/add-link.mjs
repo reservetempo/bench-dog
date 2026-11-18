@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Add a link (or an empty folder) to the homepage in app/desktop/tree.json. The homepage
-// draws it as a voxel town: each top-level folder is an area, each link a building.
+// draws it as a low-poly town: each top-level folder is one building, and what's in the
+// folder is laid out inside it (each link a server rack in the AI data center, say).
+// A folder or link with "hidden": true stays in the file but isn't drawn; this script keeps it.
 //
 //   node scripts/add-link.mjs --list
-//   node scripts/add-link.mjs --folder "untitled folder/explainers" --name "how dns works" \
+//   node scripts/add-link.mjs --folder "AI" --name "how dns works" \
 //        --href "https://reservetempo.github.io/how-dns-works/"
 //   node scripts/add-link.mjs --folder "new folder"            (makes an empty folder)
 //
@@ -48,10 +50,11 @@ function list(node, depth = 0, path = '') {
     const indent = '  '.repeat(depth);
     if (isFolder(item)) {
       const p = path ? `${path}/${item.name}` : item.name;
-      console.log(`${indent}${item.name}/   (${item.items.length} items; --folder "${p}")`);
+      const hidden = item.hidden ? ', hidden' : '';
+      console.log(`${indent}${item.name}/   (${item.items.length} items${hidden}; --folder "${p}")`);
       list(item, depth + 1, p);
     } else {
-      console.log(`${indent}${item.name}  ->  ${item.href}`);
+      console.log(`${indent}${item.name}  ->  ${item.href}${item.hidden ? '   (hidden)' : ''}`);
     }
   }
 }
@@ -59,9 +62,11 @@ function list(node, depth = 0, path = '') {
 // Same layout as the hand-written file: one line per link, so diffs stay small.
 function format(item, pad) {
   const q = JSON.stringify;
-  if (!isFolder(item)) return `${pad}{ "name": ${q(item.name)}, "href": ${q(item.href)} }`;
+  const hidden = item.hidden ? ', "hidden": true' : '';
+  if (!isFolder(item)) return `${pad}{ "name": ${q(item.name)}, "href": ${q(item.href)}${hidden} }`;
   const inner = `${pad}  `;
-  const head = item.name === undefined ? '' : `${inner}"name": ${q(item.name)},\n`;
+  let head = item.name === undefined ? '' : `${inner}"name": ${q(item.name)},\n`;
+  if (item.hidden) head += `${inner}"hidden": true,\n`;
   if (!item.items.length) return `${pad}{\n${head}${inner}"items": []\n${pad}}`;
   const children = item.items.map((child) => format(child, `${inner}  `)).join(',\n');
   return `${pad}{\n${head}${inner}"items": [\n${children}\n${inner}]\n${pad}}`;

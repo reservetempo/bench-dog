@@ -2,6 +2,7 @@
   "items": [
     {
       "name": "untitled folder",
+      "hidden": true,
       "items": [
         { "name": "archive", "href": "/archive" },
         { "name": "sequencer", "href": "/sequencer" },
@@ -14,7 +15,7 @@
       ]
     },
     {
-      "name": "paper-explainer",
+      "name": "AI",
       "items": [
         { "name": "attention is all you need", "href": "https://reservetempo.github.io/attention-is-all-you-need-breakdown/" }
       ]

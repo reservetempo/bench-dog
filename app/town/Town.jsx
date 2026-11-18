@@ -1,12 +1,13 @@
 'use client';
 
-// The homepage: a voxel town on an island. Each folder in tree.json is an area of the town
-// and each link in it is a building. Click an area to fly in and see its buildings' names;
-// click a building for a card with a Visit button. The sun, clouds, rain, snow and the
-// season follow Montreal's time and weather. Links: /#<area> opens an area straight away.
+// The homepage: a low-poly town on a plain. Each top-level folder in tree.json is one
+// building; click it to go inside, where each item in the folder is a fixture (a server rack
+// in the AI data center) with a name tag. Click a tag or a fixture for a card with a Visit
+// button. The sun, clouds, rain, snow and the season follow Montreal's time and weather.
+// Links: /#<folder> opens a folder's building straight away.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { layoutTown, LABELS, GROUND_Y, prettyHref, isFolder } from './layout';
+import { layoutTown, LABELS, prettyHref, isFolder, shown } from './layout';
 import { clockText, computeConditions, parseOverrides } from './conditions';
 import styles from './town.module.css';
 
@@ -20,17 +21,23 @@ function decodeHash(hash) {
     return [];
   }
 }
+const places = (n) => `${n} ${n === 1 ? 'place' : 'places'}`;
 
 export default function Town({ tree, fontClass }) {
   const layout = useMemo(() => layoutTown(tree), [tree]);
+  // Every building and every fixture inside one, by id.
   const byId = useMemo(() => {
     const m = new Map();
-    for (const a of layout.areas) for (const b of a.buildings) m.set(b.id, b);
+    for (const b of layout.buildings) {
+      m.set(b.id, b);
+      for (const f of b.fixtures) m.set(f.id, f);
+    }
     return m;
   }, [layout]);
 
   const hostRef = useRef(null);
   const canvasRef = useRef(null);
+  const tagsRef = useRef(null);
   const cardRef = useRef(null);
   const townRef = useRef(null);
   const tagEls = useRef(new Map());
@@ -40,18 +47,22 @@ export default function Town({ tree, fontClass }) {
   const instantRef = useRef(false);
   const restoredRef = useRef(false);
   const keyboardRef = useRef(false);
+  const focusAfterRef = useRef(null);
 
   const [status, setStatus] = useState('loading');
   const [townId, setTownId] = useState(0); // bumps each time the 3D scene is (re)built
-  const [active, setActive] = useState(null); // area index
-  const [selected, setSelected] = useState(null); // building id
+  const [inside, setInside] = useState(null); // the building being entered or shown (id)
+  const [here, setHere] = useState(null); // the building whose inside is on screen (id)
+  const [selected, setSelected] = useState(null); // building or fixture id
   const [weather, setWeather] = useState(null);
   const [now, setNow] = useState(null);
   const [touched, setTouched] = useState(false);
   const [coarse, setCoarse] = useState(false);
 
-  const area = active != null ? layout.areas[active] : null;
+  const goal = inside ? byId.get(inside) : null;
+  const room = here ? byId.get(here) : null;
   const sel = selected ? byId.get(selected) : null;
+  const card = sel && sel.parent === here ? sel : null;
   const conditions = useMemo(
     () => (now ? computeConditions({ date: now, weather, overrides: overridesRef.current }) : null),
     [now, weather]
@@ -84,7 +95,7 @@ export default function Town({ tree, fontClass }) {
     };
   }, []);
 
-  // Build the 3D town once the clock is known (the season picks the trees).
+  // Build the 3D town once the clock is known (the season colours the plain).
   const hasClock = now != null;
   useEffect(() => {
     if (!hasClock) return undefined;
@@ -103,8 +114,9 @@ export default function Town({ tree, fontClass }) {
         });
         townRef.current = town;
         window.__town = town;
-        // A new scene starts at the whole-town view: jump straight to the open area.
+        // A new scene starts outside: go straight into the open building.
         instantRef.current = true;
+        setHere(null);
         setTownId((n) => n + 1);
         setStatus('ready');
       })
@@ -119,27 +131,34 @@ export default function Town({ tree, fontClass }) {
     };
   }, [layout, hasClock]);
 
-  // Keep the address on the open area, so it can be shared. (Declared before the effect
+  // Keep the address on the open building, so it can be shared. (Declared before the effect
   // that reads the address, so it doesn't wipe the address before that has been read.)
   useEffect(() => {
     if (!restoredRef.current) return;
-    let path = area?.path ? encodePath(area.path) : '';
-    if (path && sel?.folder && sel.area === active) path += `/${encodeURIComponent(sel.name)}`;
+    let path = goal?.path ? encodePath(goal.path) : '';
+    if (path && sel?.folder && sel.parent === inside) path += `/${encodeURIComponent(sel.name)}`;
     const hash = path ? `#${path}` : '';
     if (window.location.hash !== hash) {
       window.history.replaceState(null, '', hash || window.location.pathname + window.location.search);
     }
-  }, [area, sel, active]);
+  }, [goal, sel, inside]);
 
-  // Open the area (and folder building) named in the address, now and when it changes.
+  // Open the building (and folder inside it) named in the address, now and when it changes.
+  // An address changed to none (the Back button, say) goes back out to the town.
   useEffect(() => {
-    const apply = () => {
-      const [areaPath, sub] = decodeHash(window.location.hash);
-      const a = areaPath && layout.areas.find((x) => x.path === areaPath);
-      if (!a) return;
-      setActive(a.index);
-      const b = sub && a.buildings.find((x) => x.folder && x.name === sub);
-      setSelected(b ? b.id : null);
+    const apply = (e) => {
+      const [path, sub] = decodeHash(window.location.hash);
+      const b = path && layout.buildings.find((x) => x.folder && x.path.toLowerCase() === path.toLowerCase());
+      if (!b) {
+        if (!path && e) {
+          setInside(null);
+          setSelected(null);
+        }
+        return;
+      }
+      setInside(b.id);
+      const f = sub && b.fixtures.find((x) => x.folder && x.name === sub);
+      setSelected(f ? f.id : null);
     };
     apply();
     restoredRef.current = true;
@@ -147,11 +166,11 @@ export default function Town({ tree, fontClass }) {
     return () => window.removeEventListener('hashchange', apply);
   }, [layout]);
 
-  // Hand the open area, the selection and the weather to the scene (again when it's rebuilt).
+  // Hand the place, the selection and the weather to the scene (again when it's rebuilt).
   useEffect(() => {
-    townRef.current?.focusArea(active, { instant: instantRef.current });
+    townRef.current?.enter(inside, { instant: instantRef.current });
     if (townRef.current) instantRef.current = false;
-  }, [active, townId]);
+  }, [inside, townId]);
 
   useEffect(() => {
     townRef.current?.select(selected);
@@ -161,77 +180,81 @@ export default function Town({ tree, fontClass }) {
     if (conditions) townRef.current?.setConditions(conditions);
   }, [conditions, townId]);
 
-  // Keyboard users land on the first building of an area, then on the card.
+  // Keyboard users land on the first tag inside a building, or back on the building they
+  // came out of, once that place is on screen; then on the card.
   useEffect(() => {
-    if (keyboardRef.current && area) tagEls.current.get(area.buildings[0]?.id)?.focus();
-  }, [area]);
+    const id = focusAfterRef.current ?? (room ? room.fixtures[0]?.id : null);
+    focusAfterRef.current = null;
+    if (keyboardRef.current && id) tagEls.current.get(id)?.focus();
+  }, [room]);
   useEffect(() => {
-    if (keyboardRef.current && sel) cardRef.current?.querySelector('a, button:not([data-close])')?.focus();
-  }, [sel]);
+    if (keyboardRef.current && card) cardRef.current?.querySelector('a, button:not([data-close])')?.focus();
+  }, [card]);
 
-  // Escape closes the card, then leaves the area.
+  // Escape closes the card, then leaves the building.
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
-      // Focus moves once React has re-rendered (the area's tag is hidden until then).
       if (selected) {
+        // Focus moves once React has re-rendered.
         const id = selected;
         setSelected(null);
         setTimeout(() => tagEls.current.get(id)?.focus(), 0);
-      } else if (active != null) {
-        const id = layout.areas[active].id;
-        setActive(null);
-        setTimeout(() => tagEls.current.get(id)?.focus(), 0);
+      } else if (inside) {
+        keyboardRef.current = true;
+        focusAfterRef.current = inside;
+        setInside(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, active, layout]);
+  }, [selected, inside]);
 
-  const openArea = (index, e) => {
+  const enterBuilding = (id, e) => {
     keyboardRef.current = e?.detail === 0;
     setTouched(true);
-    setActive(index);
     setSelected(null);
+    setInside(id);
   };
-  const toggleBuilding = (id, e) => {
+  const toggle = (id, e) => {
     keyboardRef.current = e?.detail === 0;
+    setTouched(true);
     setSelected((s) => (s === id ? null : id));
   };
-  const goHome = () => {
-    setActive(null);
+  const goHome = (e) => {
+    keyboardRef.current = e?.detail === 0;
     setSelected(null);
-    townRef.current?.home();
+    if (inside) {
+      focusAfterRef.current = inside;
+      setInside(null);
+    } else townRef.current?.home();
   };
 
   // Put the floating tags and the card over the 3D view, every frame.
   function placeOverlay() {
     const town = townRef.current;
     if (!town) return;
+    const veil = town.veil();
+    if (tagsRef.current) tagsRef.current.style.opacity = veil > 0.002 ? String(1 - veil) : '';
+    const where = town.where();
+    const list = where == null ? layout.buildings : byId.get(where)?.fixtures || [];
+    const raise = where == null ? 0.5 : 0.3;
     const els = tagEls.current;
     const setPos = (el, x, y, visible) => {
       el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -100%)`;
       el.style.visibility = visible ? 'visible' : 'hidden';
     };
-    for (const a of layout.areas) {
-      const el = els.get(a.id);
-      if (!el) continue;
-      const top = Math.max(GROUND_Y + 2.5, ...a.buildings.map((b) => town.buildingTop(b.id))) + 0.8;
-      const p = town.project(a.center.x, top, a.center.z);
-      setPos(el, p.x, p.y, p.visible);
-    }
-    if (!area) return;
     // Read every size first, then write, so the browser lays out once.
-    const tags = area.buildings
-      .map((b) => {
-        const el = els.get(b.id);
-        if (!el) return null;
-        const p = town.project(b.center.x, town.buildingTop(b.id) + 0.3, b.center.z);
-        return { el, x: p.x, y: p.y, visible: p.visible, w: el.offsetWidth, h: el.offsetHeight };
-      })
-      .filter(Boolean);
-    const card = sel && sel.area === active ? cardRef.current : null;
-    const cardSize = card ? { w: card.offsetWidth, h: card.offsetHeight } : null;
+    const tags = [];
+    for (const o of list) {
+      const el = els.get(o.id);
+      const a = el && town.anchor(o.id);
+      if (!a) continue;
+      const p = town.project(a.x, a.y + raise, a.z);
+      tags.push({ el, x: p.x, y: p.y, visible: p.visible, w: el.offsetWidth, h: el.offsetHeight });
+    }
+    const cardEl = card ? cardRef.current : null;
+    const cardSize = cardEl ? { w: cardEl.offsetWidth, h: cardEl.offsetHeight } : null;
     const host = hostRef.current;
     const W = host.clientWidth;
     const H = host.clientHeight;
@@ -252,14 +275,16 @@ export default function Town({ tree, fontClass }) {
       setPos(t.el, x, y, t.visible);
     }
 
-    if (card && W > 720) {
-      const p = town.project(sel.center.x, GROUND_Y + 1, sel.center.z);
+    if (cardEl && W > 720) {
+      const a = town.anchor(card.id);
+      if (!a) return;
+      const p = town.project(a.x, a.y * 0.45, a.z);
       let x = p.x + 90;
       if (x + cardSize.w > W - 12) x = p.x - 90 - cardSize.w;
       const y = Math.min(Math.max(p.y - cardSize.h / 2, 44), H - cardSize.h - 64);
-      card.style.transform = `translate3d(${Math.round(Math.max(12, x))}px, ${Math.round(y)}px, 0)`;
-    } else if (card) {
-      card.style.transform = '';
+      cardEl.style.transform = `translate3d(${Math.round(Math.max(12, x))}px, ${Math.round(y)}px, 0)`;
+    } else if (cardEl) {
+      cardEl.style.transform = '';
     }
   }
 
@@ -267,23 +292,13 @@ export default function Town({ tree, fontClass }) {
     onPick(hit) {
       keyboardRef.current = false;
       setTouched(true);
-      if (hit.type === 'building') {
-        const b = byId.get(hit.id);
-        if (b.area === active) setSelected((s) => (s === b.id ? null : b.id));
-        else {
-          setActive(b.area);
-          setSelected(null);
-        }
-      } else if (hit.type === 'area') {
-        if (hit.id !== active) setActive(hit.id);
-        setSelected(null);
-      } else {
-        setSelected(null);
-      }
+      const o = hit.type === 'object' ? byId.get(hit.id) : null;
+      if (!o) setSelected(null);
+      else if (o.folder && o.parent == null) enterBuilding(o.id);
+      else setSelected((s) => (s === o.id ? null : o.id));
     },
-    onLeave() {
-      setActive(null);
-      setSelected(null);
+    onPlace(where) {
+      setHere(where);
     },
     onInteract() {
       setTouched(true);
@@ -297,6 +312,7 @@ export default function Town({ tree, fontClass }) {
   };
 
   const c = conditions;
+  const loose = layout.buildings.filter((b) => !b.folder);
   return (
     <div className={`${styles.root} ${fontClass || ''}`} ref={hostRef}>
       <canvas ref={canvasRef} className={styles.canvas} aria-hidden="true" />
@@ -306,14 +322,14 @@ export default function Town({ tree, fontClass }) {
           <button type="button" className={styles.crumbHome} onClick={goHome}>
             {SITE_NAME}
           </button>
-          {area && (
+          {goal && (
             <>
               <span className={styles.sep} aria-hidden="true">
                 /
               </span>
               <span className={styles.crumbArea}>
-                <span className={styles.swatch} style={{ background: area.color }} aria-hidden="true" />
-                {area.name}
+                <span className={styles.swatch} style={{ background: goal.color }} aria-hidden="true" />
+                {goal.name}
               </span>
             </>
           )}
@@ -332,53 +348,57 @@ export default function Town({ tree, fontClass }) {
       </header>
 
       {status === 'ready' && (
-        <div className={styles.tags}>
-          {layout.areas.map((a) => (
+        <div className={styles.tags} ref={tagsRef}>
+          {here == null &&
+            layout.buildings.map((b) => (
+              <button
+                key={b.id}
+                ref={tagRef(b.id)}
+                type="button"
+                className={`${styles.tag} ${styles.buildingTag} ${b.id === selected ? styles.tagOn : ''}`}
+                aria-pressed={b.folder ? undefined : b.id === selected}
+                aria-label={b.folder ? `${b.name}: go inside, ${places(b.fixtures.length)}` : undefined}
+                onClick={(e) => (b.folder ? enterBuilding(b.id, e) : toggle(b.id, e))}
+              >
+                <span className={styles.swatch} style={{ background: b.color }} aria-hidden="true" />
+                {b.name}
+                {b.folder && (
+                  <span className={styles.count} aria-hidden="true">
+                    {b.fixtures.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          {room?.fixtures.map((f) => (
             <button
-              key={a.id}
-              ref={tagRef(a.id)}
+              key={f.id}
+              ref={tagRef(f.id)}
               type="button"
-              className={`${styles.tag} ${styles.areaTag}`}
-              hidden={a.index === active}
-              onClick={(e) => openArea(a.index, e)}
+              className={`${styles.tag} ${f.id === selected ? styles.tagOn : ''}`}
+              aria-pressed={f.id === selected}
+              onClick={(e) => toggle(f.id, e)}
             >
-              <span className={styles.swatch} style={{ background: a.color }} aria-hidden="true" />
-              {a.name}
-              <span className={styles.count} aria-label={`${a.items.length} ${a.items.length === 1 ? 'place' : 'places'}`}>
-                {a.items.length}
-              </span>
-            </button>
-          ))}
-          {area?.buildings.map((b) => (
-            <button
-              key={b.id}
-              ref={tagRef(b.id)}
-              type="button"
-              className={`${styles.tag} ${b.id === selected ? styles.tagOn : ''}`}
-              aria-pressed={b.id === selected}
-              onClick={(e) => toggleBuilding(b.id, e)}
-            >
-              {b.name}
+              {f.name}
             </button>
           ))}
         </div>
       )}
 
-      {sel && sel.area === active && (
-        <div className={styles.card} ref={cardRef} role="dialog" aria-label={sel.name}>
+      {card && (
+        <div className={styles.card} ref={cardRef} role="dialog" aria-label={card.name}>
           <div className={styles.cardHead}>
-            <span className={styles.cardKind}>{LABELS[sel.theme]}</span>
+            <span className={styles.cardKind}>{card.parent ? card.label : LABELS[card.theme]}</span>
             <button type="button" data-close className={styles.cardClose} aria-label="Close" onClick={() => setSelected(null)}>
               ×
             </button>
           </div>
-          <h2 className={styles.cardTitle}>{sel.name}</h2>
-          {sel.folder ? (
-            <LinkList items={sel.item.items} className={styles.cardList} />
+          <h2 className={styles.cardTitle}>{card.name}</h2>
+          {card.folder ? (
+            <LinkList items={card.item.items} className={styles.cardList} />
           ) : (
             <>
-              <p className={styles.cardHref}>{prettyHref(sel.item.href)}</p>
-              <a className={styles.visit} href={sel.item.href}>
+              <p className={styles.cardHref}>{prettyHref(card.item.href)}</p>
+              <a className={styles.visit} href={card.item.href}>
                 Visit <span aria-hidden="true">→</span>
               </a>
             </>
@@ -400,15 +420,15 @@ export default function Town({ tree, fontClass }) {
           <button type="button" className={styles.ctrl} aria-label="Turn right" onClick={() => townRef.current?.rotate(1)}>
             <PixelGlyph rows={TURN_LEFT} flip />
           </button>
-          <button type="button" className={styles.ctrl} aria-label="Whole town" onClick={goHome}>
-            <PixelGlyph rows={HOUSE} />
+          <button type="button" className={styles.ctrl} aria-label={inside ? 'Back outside' : 'Whole town'} onClick={goHome}>
+            <PixelGlyph rows={inside ? DOOR : HOUSE} />
           </button>
         </div>
       )}
 
       {status === 'ready' && (
-        <p className={`${styles.hint} ${touched || area ? styles.hintGone : ''}`} aria-hidden="true">
-          {coarse ? 'drag to look around · pinch to zoom · tap an area' : 'drag to look around · scroll to zoom · Q/E to turn · click an area'}
+        <p className={`${styles.hint} ${touched || inside ? styles.hintGone : ''}`} aria-hidden="true">
+          {coarse ? 'drag to look around · pinch to zoom · tap a building to go in' : 'drag to look around · scroll to zoom · Q/E to turn · click a building to go in'}
         </p>
       )}
 
@@ -416,12 +436,20 @@ export default function Town({ tree, fontClass }) {
 
       <nav className={status === 'failed' ? styles.fallback : styles.visuallyHidden} aria-label="All pages">
         <h2>{status === 'failed' ? "The 3D town couldn't load here, so these are its pages:" : 'All pages'}</h2>
-        {layout.areas.map((a) => (
-          <section key={a.id}>
-            <h3>{a.name}</h3>
-            <LinkList items={a.items} />
+        {layout.buildings
+          .filter((b) => b.folder)
+          .map((b) => (
+            <section key={b.id}>
+              <h3>{b.name}</h3>
+              <LinkList items={b.item.items} />
+            </section>
+          ))}
+        {loose.length > 0 && (
+          <section>
+            <h3>town</h3>
+            <LinkList items={loose.map((b) => b.item)} />
           </section>
-        ))}
+        )}
       </nav>
     </div>
   );
@@ -430,7 +458,7 @@ export default function Town({ tree, fontClass }) {
 function LinkList({ items, className }) {
   return (
     <ul className={className}>
-      {items.map((item) => (
+      {shown(items).map((item) => (
         <li key={item.name}>
           {isFolder(item) ? (
             <>
@@ -471,6 +499,7 @@ const ICONS = {
 };
 const TURN_LEFT = ['..i.....', '.ii.....', 'iiiiii..', '.ii...i.', '..i....i', '.......i', '......i.', '..iiii..'];
 const HOUSE = ['...ii...', '..iiii..', '.iiiiii.', 'iiiiiiii', '.i....i.', '.i.ii.i.', '.i.ii.i.', '.iiiiii.'];
+const DOOR = ['.iiiiii.', '.i....i.', '.i....i.', '.i....i.', '.i..i.i.', '.i....i.', '.i....i.', 'iiiiiiii'];
 
 function PixelGlyph({ rows, flip = false, size = 16 }) {
   const n = rows.length;

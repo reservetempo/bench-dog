@@ -1,10 +1,10 @@
 // Light and weather: the sun (or moon) with shadows, the hazy sky colour, rain, snow,
-// lightning, cloud shadows drifting with the wind, snow on the ground and lamp glow at night.
+// lightning, cloud shadows drifting with the wind, snow on the ground and lit windows at night.
 // Everything eases toward the latest conditions, so changes fade in rather than jump.
 
 import * as THREE from 'three';
-import { voxelUniforms, meshVoxels } from './voxels';
-import { cloudVoxels } from './buildings';
+import { Shape, shapeUniforms } from './shapes';
+import { mulberry32 } from './random';
 import { GROUND_Y } from './layout';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -67,9 +67,6 @@ function goalsFor(c) {
   const hemiGround = col(0x1c2029).lerp(col(0x8b7a5c), day).lerp(col(0xdfe4ea).multiplyScalar(0.3 + 0.7 * day), c.snowCover * 0.6);
   const hemiInt = (1.75 - 0.15 * day) * (1 + 0.45 * overcast * day);
 
-  const water = col(0x16263e).lerp(col(0x3b8fd0), day).lerp(col(0x22303d).lerp(col(0x5b8299), day), overcast * 0.7);
-  if (c.temp != null && c.temp < -8) water.lerp(col(0xbcd3de).multiplyScalar(0.3 + 0.7 * day), 0.3);
-
   return {
     horizon,
     sunDir,
@@ -78,7 +75,6 @@ function goalsFor(c) {
     hemiSky,
     hemiGround,
     hemiInt,
-    water,
     night: Math.max(1 - smooth(-2, 7, elev), 0.5 * overcast * wet),
     snow: c.snowCover,
     fogNear: (1.15 - 0.45 * wet) * (1 - 0.8 * c.fog),
@@ -89,10 +85,23 @@ function goalsFor(c) {
   };
 }
 
-const COLOR_KEYS = ['horizon', 'sunColor', 'hemiSky', 'hemiGround', 'water'];
+const COLOR_KEYS = ['horizon', 'sunColor', 'hemiSky', 'hemiGround'];
 const NUM_KEYS = ['sunInt', 'hemiInt', 'night', 'snow', 'fogNear', 'fogFar', 'rain', 'snowfall', 'clouds'];
 
-export function createSky({ scene, world, reducedMotion, shadowSize = 2048, center }) {
+// A cloud for casting shadows: a few flattened lumps.
+function cloudGeometry(seed) {
+  const r = mulberry32(seed);
+  const S = new Shape();
+  const lumps = 3 + Math.floor(r() * 3);
+  for (let i = 0; i < lumps; i += 1) {
+    const x = (r() - 0.5) * 12;
+    const z = (r() - 0.5) * 7;
+    S.geo(new THREE.IcosahedronGeometry(3 + r() * 2.5, 0), 0xffffff, { x, z, sy: 0.35, ry: r() * 3 });
+  }
+  return S.geometry();
+}
+
+export function createSky({ scene, reducedMotion, shadowSize = 2048, center }) {
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowSize, shadowSize);
@@ -138,29 +147,13 @@ export function createSky({ scene, world, reducedMotion, shadowSize = 2048, cent
   snow.visible = false;
   scene.add(snow);
 
-  // Lamp glow at night.
-  const haloGeo = new THREE.BufferGeometry();
-  haloGeo.setAttribute('position', new THREE.BufferAttribute(world.halos, 3));
-  const haloMat = new THREE.PointsMaterial({
-    color: 0xffd58a,
-    size: 1.6,
-    map: softDot('rgba(255,236,190,0.9)', 'rgba(255,200,120,0)'),
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const halos = new THREE.Points(haloGeo, haloMat);
-  halos.visible = false;
-  scene.add(halos);
-
   // Clouds you never see, only their shadows sliding over the town.
   const shadowOnly = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
   const CLOUD_TYPES = 4;
   const PER_TYPE = 8;
   const clouds = [];
   for (let k = 0; k < CLOUD_TYPES; k += 1) {
-    const mesh = new THREE.InstancedMesh(meshVoxels(cloudVoxels(11 + k * 7), { size: [1.5, 1.2, 1.5], origin: [0, 0, 0] }), shadowOnly, PER_TYPE);
+    const mesh = new THREE.InstancedMesh(cloudGeometry(11 + k * 7), shadowOnly, PER_TYPE);
     mesh.castShadow = true;
     mesh.frustumCulled = false;
     mesh.count = 0;
@@ -228,12 +221,8 @@ export function createSky({ scene, world, reducedMotion, shadowSize = 2048, cent
     hemi.color.copy(cur.hemiSky);
     hemi.groundColor.copy(cur.hemiGround);
     hemi.intensity = cur.hemiInt + boost;
-    world.water.material.color.copy(cur.water);
-    world.bankMat.color.setHex(world.bankBase).lerp(col(0xeef2f6), cur.snow * 0.9);
-    voxelUniforms.uSnow.value = cur.snow;
-    voxelUniforms.uNight.value = cur.night;
-    haloMat.opacity = cur.night * 0.85;
-    halos.visible = cur.night > 0.02;
+    shapeUniforms.uSnow.value = cur.snow;
+    shapeUniforms.uNight.value = cur.night;
 
     // Fit the shadow box around what's on screen, snapped to whole shadow-map texels so
     // shadows don't shimmer while the view pans.
@@ -328,9 +317,7 @@ export function createSky({ scene, world, reducedMotion, shadowSize = 2048, cent
   function dispose() {
     rainGeo.dispose();
     snowGeo.dispose();
-    haloGeo.dispose();
     flakeMat.map.dispose();
-    haloMat.map.dispose();
     for (const c of clouds) c.mesh.geometry.dispose();
   }
 

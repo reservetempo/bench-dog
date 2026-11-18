@@ -1,6 +1,7 @@
 // /app/page.jsx
-// The homepage is a voxel town: each folder in app/desktop/tree.json is an area and each
-// link in it is a building (see app/town/). Add a link with scripts/add-link.mjs.
+// The homepage is a low-poly town: each top-level folder in app/desktop/tree.json is one
+// building, and you go inside it to see what the folder holds (see app/town/). Add a link
+// with scripts/add-link.mjs.
 
 import { Pixelify_Sans } from 'next/font/google';
 import Town from './town/Town';

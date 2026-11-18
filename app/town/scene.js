@@ -1,28 +1,26 @@
-// The 3D town: renderer, camera (drag to pan, scroll or pinch to zoom, turn in 90° steps),
-// picking, the shuttle train, and the frame loop. Town.jsx drives it through the returned API
-// and gets clicks, area leaving and per-frame updates back through `handlers.current`.
+// The 3D view: renderer, camera (drag to pan, scroll or pinch to zoom, turn in 90° steps),
+// picking and the frame loop, for the town outside and for the inside of each folder's
+// building. Going in or out flies toward the door as a dark veil comes down, swaps scenes
+// and lifts the veil. Town.jsx drives it through the returned API and hears back through
+// `handlers.current` (onPick, onPlace, onInteract, onFrame).
 
 import * as THREE from 'three';
-import { buildWorld, trackPoint } from './world';
+import { buildWorld } from './world';
+import { buildInterior } from './interiors';
 import { createSky } from './sky';
-import { meshVoxels } from './voxels';
-import { trainCarVoxels } from './buildings';
-import { GROUND_Y, LOT } from './layout';
+import { shapeUniforms } from './shapes';
 
-const MIN_DIST = 9;
-const MAX_DIST = 150;
 const FOV = 32;
 const TAN = Math.tan((FOV * Math.PI) / 360);
+const OUT_MIN = 9;
+const OUT_MAX = 150;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
-const easeSine = (t) => 0.5 - Math.cos(Math.PI * t) / 2;
-
-// Looking down steeply from far away, a little more toward the horizon close up.
-function pitchFor(dist) {
-  const t = clamp((dist - MIN_DIST) / (MAX_DIST - MIN_DIST), 0, 1);
-  return 0.66 + 0.36 * Math.sqrt(t);
-}
+const smooth01 = (x) => {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 export function createTown({ host, canvas, layout, conditions, handlers, reducedMotion }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -31,100 +29,97 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const shadowSize = coarse ? 1024 : 2048;
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.3, 3000);
 
+  // ---- Places: the town outside, and the inside of each folder's building ----
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 3000);
   const world = buildWorld(layout, conditions.season);
   scene.add(world.group);
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const sky = createSky({
-    scene,
-    world,
-    reducedMotion,
-    shadowSize: coarse ? 1024 : 2048,
-    center: { x: layout.island.cx, z: layout.island.cz },
-  });
+  const sky = createSky({ scene, reducedMotion, shadowSize, center: layout.center });
   sky.setConditions(conditions);
+  const outside = {
+    id: null,
+    scene,
+    objects: world.buildings,
+    pickables: [...world.buildings.values()].map((o) => o.mesh),
+    floorY: world.floorY,
+    min: OUT_MIN,
+    max: OUT_MAX,
+    yaw: 0,
+    bounds: layout.bounds,
+    // Looking down steeply from far away, a little more toward the horizon close up.
+    pitch: (dist) => 0.66 + 0.36 * Math.sqrt(clamp((dist - OUT_MIN) / (OUT_MAX - OUT_MIN), 0, 1)),
+    update(dt, view) {
+      sky.update(dt, view);
+    },
+  };
+  const interiors = new Map();
+  const buildingOf = (id) => layout.buildings.find((x) => x.id === id);
+  // A building's inside, built the first time it's visited (the town for anything else).
+  function placeFor(id) {
+    if (id == null) return outside;
+    let p = interiors.get(id);
+    if (!p) {
+      const b = buildingOf(id);
+      if (!b?.inside) return outside;
+      p = buildInterior(b, { shadowSize });
+      interiors.set(id, p);
+    }
+    return p;
+  }
+  let place = outside;
 
-  // A ring around the selected building's lot.
+  // The yellow ring round the selected thing's footprint.
   const ring = new THREE.Group();
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xfff1a8 });
-  const half = LOT / 2 - 0.08;
-  for (const [x, z, w, d] of [
-    [0, -half, LOT - 0.04, 0.1],
-    [0, half, LOT - 0.04, 0.1],
-    [-half, 0, 0.1, LOT - 0.04],
-    [half, 0, 0.1, LOT - 0.04],
-  ]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), ringMat);
-    bar.position.set(x, 0.03, z);
-    ring.add(bar);
+  const ringGeo = new THREE.BoxGeometry(1, 0.05, 1);
+  const bars = [0, 1, 2, 3].map(() => ring.add(new THREE.Mesh(ringGeo, ringMat)).children.at(-1));
+  let ringFoot = null;
+  function shapeRing(foot) {
+    if (ringFoot === foot) return;
+    ringFoot = foot;
+    const { w, d } = foot;
+    const t = 0.1;
+    bars[0].position.set(0, 0, -d / 2 + t / 2);
+    bars[1].position.set(0, 0, d / 2 - t / 2);
+    bars[0].scale.set(w, 1, t);
+    bars[1].scale.set(w, 1, t);
+    bars[2].position.set(-w / 2 + t / 2, 0, 0);
+    bars[3].position.set(w / 2 - t / 2, 0, 0);
+    bars[2].scale.set(t, 1, d);
+    bars[3].scale.set(t, 1, d);
   }
   ring.visible = false;
   scene.add(ring);
 
-  // ---- Train: three cars shuttling between the stations ----
-  const train = layout.track ? makeTrain() : null;
-
-  function makeTrain() {
-    const cab = meshVoxels(trainCarVoxels(true));
-    const mid = meshVoxels(trainCarVoxels(false));
-    const SPACING = 2.65;
-    const cars = [
-      { geo: cab, off: -SPACING, flip: true },
-      { geo: mid, off: 0, flip: false },
-      { geo: cab, off: SPACING, flip: false },
-    ].map((c) => {
-      const mesh = new THREE.Mesh(c.geo, world.material);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-      return { ...c, mesh };
-    });
-    const { stops, length } = layout.track;
-    const order = [...stops.keys()];
-    order.push(...order.slice(1, -1).reverse());
-    const DWELL = 6;
-    const SPEED = 3.2;
-    let total = 0;
-    const legs = order.map((from, i) => {
-      const a = stops[from];
-      const b = stops[order[(i + 1) % order.length]];
-      const travel = Math.abs(b - a) / SPEED + 1.5;
-      const leg = { a, b, start: total, travel };
-      total += DWELL + travel;
-      return leg;
-    });
-    const p = { x: 0, z: 0, yaw: 0 };
-    return {
-      update(t) {
-        let s = stops[0];
-        if (!reducedMotion) {
-          const tt = t % total;
-          const leg = legs.findLast((l) => l.start <= tt) || legs[0];
-          const local = tt - leg.start;
-          s = local < DWELL ? leg.a : leg.a + (leg.b - leg.a) * easeSine(Math.min(1, (local - DWELL) / leg.travel));
-        }
-        for (const car of cars) {
-          trackPoint(layout.track, clamp(s + car.off, 0, length), p);
-          car.mesh.position.set(p.x, GROUND_Y + 0.25, p.z);
-          car.mesh.rotation.y = p.yaw + (car.flip ? Math.PI : 0);
-        }
-      },
-    };
-  }
+  // The veil: a dark sheet drawn over the whole view while going in or out.
+  const veilScene = new THREE.Scene();
+  const veilMat = new THREE.ShaderMaterial({
+    uniforms: { uA: { value: 0 }, uC: { value: new THREE.Color(0x0b0f15) } },
+    vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform float uA; uniform vec3 uC; void main() { gl_FragColor = vec4(uC, uA); }',
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const veilQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), veilMat);
+  veilQuad.frustumCulled = false;
+  veilScene.add(veilQuad);
+  let veil = 0;
 
   // ---- Camera ----
-  const rig = { target: new THREE.Vector3(0, GROUND_Y, 0), dist: 60, yaw: 0, yawGoal: 0, fly: null };
+  const rig = { target: new THREE.Vector3(0, outside.floorY, 0), dist: 60, yaw: 0, yawGoal: 0, fly: null };
   const view = { target: rig.target, dist: rig.dist };
-  const b = layout.bounds;
   const size = { w: 1, h: 1 };
 
   function applyCamera() {
-    rig.target.x = clamp(rig.target.x, b.minX - 6, b.maxX + 6);
-    rig.target.z = clamp(rig.target.z, b.minZ - 6, b.maxZ + 6);
-    rig.dist = clamp(rig.dist, MIN_DIST, MAX_DIST);
-    const p = pitchFor(rig.dist);
+    const b = place.bounds;
+    rig.target.x = clamp(rig.target.x, b.minX, b.maxX);
+    rig.target.z = clamp(rig.target.z, b.minZ, b.maxZ);
+    rig.dist = clamp(rig.dist, place.min, place.max);
+    const p = place.pitch(rig.dist);
     camera.position.set(
       rig.target.x + Math.sin(rig.yaw) * Math.cos(p) * rig.dist,
       rig.target.y + Math.sin(p) * rig.dist,
@@ -141,52 +136,74 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
     const aspect = size.w / size.h;
     let dist = 40;
     for (let i = 0; i < 3; i += 1) {
-      const p = pitchFor(dist);
+      const p = place.pitch(dist);
       dist = Math.max(sw / (2 * TAN * aspect), (sd * Math.sin(p)) / (2 * TAN)) * 1.06;
     }
-    return clamp(dist, MIN_DIST, MAX_DIST);
+    return clamp(dist, place.min, place.max);
   }
 
-  const home = () => ({
-    x: (b.minX + b.maxX) / 2,
-    z: (b.minZ + b.maxZ) / 2 + 1,
-    dist: fitDist(b.maxX - b.minX, b.maxZ - b.minZ),
-  });
-
-  function areaFit(index) {
-    const a = layout.areas[index];
-    const w = a.rect.x1 - a.rect.x0;
-    const d = a.rect.z1 - a.rect.z0;
-    // A little room at the sides, more up the screen for tall buildings and their tags.
-    const portrait = size.w / size.h < 0.8;
-    const dist = Math.max(portrait ? 14 : 18, fitDist(w, d, portrait ? 1 : 5, 7));
-    return { x: a.center.x, z: a.center.z, dist, radius: Math.hypot(w + 5, d + 7) / 2 };
+  const home = () => {
+    const f = layout.town;
+    return { x: (f.minX + f.maxX) / 2, z: (f.minZ + f.maxZ) / 2 + 1, dist: fitDist(f.maxX - f.minX, f.maxZ - f.minZ) };
+  };
+  // Where the camera settles in a place (call it once that place is the current one).
+  function fitFor(p) {
+    if (p === outside) return home();
+    const v = p.view;
+    return { x: v.x, z: v.z, dist: fitDist(v.w, v.d, 1.2, 4.5) };
+  }
+  // Close up on a building's door, from outside.
+  function doorOf(id) {
+    const b = buildingOf(id);
+    return b ? { x: b.center.x, z: b.center.z + 0.6, dist: OUT_MIN } : home();
   }
 
-  function flyTo({ x, z, dist }, instant) {
-    if (instant || reducedMotion) {
-      rig.fly = null;
-      rig.target.set(x, GROUND_Y, z);
-      rig.dist = dist;
-      applyCamera();
+  function jump({ x, z, dist }) {
+    rig.fly = null;
+    rig.target.set(x, place.floorY, z);
+    rig.dist = dist;
+    applyCamera();
+  }
+
+  // Fly the camera somewhere. `veilTo` brings the veil to that value over the part of the
+  // flight from `a` to `b` (0 to 1); `done` runs when it lands. A flight with a veil is a
+  // trip in or out, which input can't interrupt.
+  function flyTo(goal, { dur = 1.1, veilTo = null, a = 0, b = 1, done = null } = {}) {
+    if (reducedMotion && veilTo == null) {
+      jump(goal);
       return;
     }
-    rig.fly = { fx: rig.target.x, fz: rig.target.z, fd: rig.dist, tx: x, tz: z, td: clamp(dist, MIN_DIST, MAX_DIST), t: 0 };
+    rig.fly = {
+      fx: rig.target.x,
+      fz: rig.target.z,
+      fd: rig.dist,
+      tx: goal.x,
+      tz: goal.z,
+      td: clamp(goal.dist, place.min, place.max),
+      t: 0,
+      dur,
+      veil: veilTo == null ? null : { from: veil, to: veilTo, a, b },
+      done,
+    };
   }
-
+  const tripping = () => Boolean(rig.fly?.veil);
   function stopFly() {
-    rig.fly = null;
+    if (!tripping()) rig.fly = null;
   }
 
   function updateCamera(dt) {
     if (rig.fly) {
       const f = rig.fly;
-      f.t = Math.min(1, f.t + dt / 1.1);
+      f.t = Math.min(1, f.t + dt / f.dur);
       const e = easeInOut(f.t);
       rig.target.x = f.fx + (f.tx - f.fx) * e;
       rig.target.z = f.fz + (f.tz - f.fz) * e;
       rig.dist = Math.exp(Math.log(f.fd) + (Math.log(f.td) - Math.log(f.fd)) * e);
-      if (f.t >= 1) rig.fly = null;
+      if (f.veil) veil = f.veil.from + (f.veil.to - f.veil.from) * smooth01((f.t - f.veil.a) / (f.veil.b - f.veil.a));
+      if (f.t >= 1) {
+        rig.fly = null;
+        f.done?.();
+      }
     }
     if (rig.yaw !== rig.yawGoal) {
       const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 9);
@@ -196,11 +213,60 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
     applyCamera();
   }
 
+  // ---- Going in and out ----
+  let goal = null; // where the view is headed: a folder building's id, or null for the town
+  let hovered = null;
+  let hoverAt = null;
+  let selected = null;
+
+  function swap(id) {
+    place.yaw = rig.yawGoal;
+    place = placeFor(id);
+    rig.yaw = place.yaw;
+    rig.yawGoal = place.yaw;
+    rig.target.y = place.floorY;
+    groundPlane.constant = -place.floorY;
+    place.scene.add(ring);
+    hovered = null;
+    hoverAt = null;
+    canvas.style.cursor = '';
+    handlers.current.onPlace?.(place.id);
+  }
+
+  // Go into a folder's building (its id), or back out to the town (null).
+  function enter(id, { instant = false } = {}) {
+    const to = id != null && buildingOf(id)?.inside ? id : null;
+    if (to === goal) return;
+    goal = to;
+    if (instant || reducedMotion) {
+      if (place.id !== to) swap(to);
+      veil = 0;
+      jump(fitFor(place));
+      return;
+    }
+    if (place.id === to) {
+      // Turned back before getting there: lift the veil where we are.
+      flyTo(fitFor(place), { dur: 0.7, veilTo: 0, b: 0.6 });
+      return;
+    }
+    const door = place === outside ? doorOf(to) : { x: rig.target.x, z: rig.target.z, dist: rig.dist * 0.6 };
+    flyTo(door, { dur: 0.8, veilTo: 1, a: 0.35, done: arrive });
+  }
+
+  function arrive() {
+    const from = place.id;
+    swap(goal);
+    const fit = fitFor(place);
+    jump(place === outside ? doorOf(from) : { ...fit, dist: fit.dist * 0.62 });
+    veil = 1;
+    flyTo(fit, { dur: 1.0, veilTo: 0, b: 0.55 });
+  }
+
   // ---- Picking ----
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
-  const buildingMeshes = [...world.buildings.values()].map((x) => x.mesh);
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -place.floorY);
+  const tmpHit = new THREE.Vector3();
 
   function rayAt(clientX, clientY) {
     const r = canvas.getBoundingClientRect();
@@ -215,41 +281,24 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
 
   function pick(clientX, clientY) {
     rayAt(clientX, clientY);
-    const hit = raycaster.intersectObjects(buildingMeshes, false)[0];
-    if (hit) return { type: 'building', id: hit.object.userData.buildingId };
-    const p = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
-    if (p) {
-      for (const a of layout.areas) {
-        const { x0, z0, x1, z1 } = a.rect;
-        if (p.x >= x0 - 2 && p.x <= x1 + 2 && p.z >= z0 - 2 && p.z <= z1 + 2) return { type: 'area', id: a.index };
+    const hit = raycaster.intersectObjects(place.pickables, false)[0];
+    if (hit) return { type: 'object', id: hit.object.userData.id };
+    if (place === outside) {
+      // Outside, anywhere on a building's lot counts as the building.
+      const p = raycaster.ray.intersectPlane(groundPlane, tmpHit);
+      if (p) {
+        for (const b of layout.buildings) {
+          const { x0, z0, x1, z1 } = b.rect;
+          if (p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1) return { type: 'object', id: b.id };
+        }
       }
     }
     return { type: 'none' };
   }
 
-  // ---- State from Town.jsx ----
-  let activeArea = null;
-  let selected = null;
-  let hovered = null;
-
-  function focusArea(index, { instant = false } = {}) {
-    const next = index ?? null;
-    if (next === activeArea) return;
-    activeArea = next;
-    flyTo(next == null ? home() : areaFit(next), instant);
-  }
-
-  function select(id) {
-    selected = id ?? null;
-    const sel = selected && world.buildings.get(selected);
-    ring.visible = Boolean(sel);
-    if (sel) ring.position.set(sel.center.x, GROUND_Y, sel.center.z);
-  }
-
   // ---- Input ----
   const pointers = new Map();
   let drag = null;
-  let hoverAt = null;
   const tmpA = new THREE.Vector3();
 
   const interact = () => handlers.current.onInteract?.();
@@ -288,19 +337,19 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
         stopFly();
         interact();
       }
-      if (drag.moved && drag.grab) {
+      if (drag.moved && drag.grab && !tripping()) {
         const p = groundAt(e.clientX, e.clientY, tmpA);
         if (p) {
           rig.target.add(drag.grab).sub(p);
           applyCamera();
         }
       }
-    } else if (pointers.size === 2) {
+    } else if (pointers.size === 2 && !tripping()) {
       stopFly();
       interact();
       const [p1, p2] = [...pointers.values()];
       const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-      if (drag.pinch > 0) rig.dist = clamp((drag.dist * drag.pinch) / Math.max(d, 1), MIN_DIST, MAX_DIST);
+      if (drag.pinch > 0) rig.dist = clamp((drag.dist * drag.pinch) / Math.max(d, 1), place.min, place.max);
       applyCamera();
       const p = groundAt((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, tmpA);
       if (p && drag.grab) {
@@ -314,7 +363,7 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
     if (pointers.size === 0) {
-      if (drag && !drag.moved && e.type === 'pointerup') handlers.current.onPick?.(pick(e.clientX, e.clientY));
+      if (drag && !drag.moved && e.type === 'pointerup' && !tripping()) handlers.current.onPick?.(pick(e.clientX, e.clientY));
       drag = null;
     } else if (pointers.size === 1) {
       const [p] = [...pointers.values()];
@@ -323,9 +372,10 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
   }
 
   function zoomAround(factor, clientX, clientY) {
+    if (tripping()) return;
     stopFly();
     const before = clientX != null ? groundAt(clientX, clientY) : null;
-    rig.dist = clamp(rig.dist * factor, MIN_DIST, MAX_DIST);
+    rig.dist = clamp(rig.dist * factor, place.min, place.max);
     applyCamera();
     if (before) {
       const after = groundAt(clientX, clientY, tmpA);
@@ -344,11 +394,13 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
   }
 
   function rotate(dir) {
+    if (tripping()) return;
     stopFly();
     rig.yawGoal += (dir * Math.PI) / 2;
   }
 
   function panBy(right, forward) {
+    if (tripping()) return;
     stopFly();
     const step = rig.dist * 0.1;
     const s = Math.sin(rig.yawGoal);
@@ -403,40 +455,55 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
   const ro = new ResizeObserver(resize);
   ro.observe(host);
   resize();
-  // On a tall screen (a phone held upright), turn the view so the long island runs up the screen.
-  if (size.w / size.h < 0.8) {
-    rig.yaw = -Math.PI / 2;
-    rig.yawGoal = rig.yaw;
+  // On a tall screen (a phone held upright), turn the town so a long one runs up the screen.
+  if (size.w / size.h < 0.8 && layout.town.maxX - layout.town.minX > layout.town.maxZ - layout.town.minZ) {
+    outside.yaw = -Math.PI / 2;
+    rig.yaw = outside.yaw;
+    rig.yawGoal = outside.yaw;
   }
-  const h0 = home();
-  rig.target.set(h0.x, GROUND_Y, h0.z);
-  rig.dist = h0.dist;
-  applyCamera();
+  jump(home());
 
   // ---- Frame loop ----
-  function updateBuildings(dt) {
+  // Lift (or slide out) the thing under the pointer and the selected one; ring the selected.
+  function updateObjects(dt) {
     if (hoverAt && !drag) {
-      const hit = pick(hoverAt.x, hoverAt.y);
+      const hit = tripping() ? { type: 'none' } : pick(hoverAt.x, hoverAt.y);
       hoverAt = null;
-      hovered = hit.type === 'building' ? hit.id : null;
+      hovered = hit.type === 'object' ? hit.id : null;
       canvas.style.cursor = hit.type === 'none' ? '' : 'pointer';
     }
     const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 12);
-    for (const bd of world.buildings.values()) {
-      const goal = bd.id === selected ? 0.3 : bd.id === hovered ? 0.1 : 0;
-      bd.lift += (goal - bd.lift) * k;
-      bd.mesh.position.y = GROUND_Y + bd.lift;
-      bd.mesh.material = goal > 0 ? world.highlight : world.material;
+    for (const o of place.objects.values()) {
+      const g = o.id === selected ? o.reach.selected : o.id === hovered ? o.reach.hover : 0;
+      o.lift += (g - o.lift) * k;
+      if (Math.abs(g - o.lift) < 0.0005) o.lift = g;
+      o.mesh.position.copy(o.base).addScaledVector(o.dir, o.lift);
+      o.mesh.material = g > 0 ? o.highlight : o.material;
+    }
+    const s = selected != null ? place.objects.get(selected) : null;
+    ring.visible = Boolean(s);
+    if (s) {
+      shapeRing(s.foot);
+      ring.position.set(s.base.x + s.dir.x * s.lift, s.base.y + 0.03, s.base.z + s.dir.z * s.lift);
+      ring.rotation.y = s.facing || 0;
     }
   }
 
-  function checkLeave() {
-    if (activeArea == null || rig.fly || drag?.moved === false) return;
-    const fit = areaFit(activeArea);
-    const away = Math.hypot(rig.target.x - fit.x, rig.target.z - fit.z) > fit.radius + 4;
-    if (rig.dist > fit.dist * 2.3 || away) {
-      activeArea = null;
-      handlers.current.onLeave?.();
+  function step(dt) {
+    updateCamera(dt);
+    view.dist = rig.dist;
+    updateObjects(dt);
+    if (!reducedMotion) shapeUniforms.uTime.value += dt;
+    place.update(dt, place === outside ? view : rig.yaw);
+  }
+
+  function draw() {
+    renderer.render(place.scene, camera);
+    if (veil > 0.002) {
+      veilMat.uniforms.uA.value = veil;
+      renderer.autoClear = false;
+      renderer.render(veilScene, camera);
+      renderer.autoClear = true;
     }
   }
 
@@ -446,13 +513,8 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
-    updateCamera(dt);
-    view.dist = rig.dist;
-    updateBuildings(dt);
-    train?.update(now / 1000);
-    sky.update(dt, view);
-    renderer.render(scene, camera);
-    checkLeave();
+    step(dt);
+    draw();
     handlers.current.onFrame?.();
   }
   raf = requestAnimationFrame(frame);
@@ -460,13 +522,18 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
   // ---- API ----
   const projected = { x: 0, y: 0, visible: false };
   const pv = new THREE.Vector3();
+  const anchored = { x: 0, y: 0, z: 0 };
 
   return {
-    focusArea,
-    select,
+    enter,
+    select(id) {
+      selected = id ?? null;
+    },
+    // The building whose inside is on screen (null: the town), and how far down the veil is.
+    where: () => place.id,
+    veil: () => veil,
     home() {
-      activeArea = null;
-      flyTo(home());
+      if (place === outside && !tripping()) flyTo(home());
     },
     rotate,
     zoomBy: (f) => zoomAround(f),
@@ -479,28 +546,29 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
       projected.visible = pv.z > -1 && pv.z < 1 && projected.x > -200 && projected.x < size.w + 200;
       return projected;
     },
-    buildingTop(id) {
-      const bd = world.buildings.get(id);
-      return bd ? GROUND_Y + bd.lift + bd.height : GROUND_Y;
+    // The top middle of a building or fixture in the current place, as it moves (reused
+    // object), or null if it isn't in this place.
+    anchor(id) {
+      const o = place.objects.get(id);
+      if (!o) return null;
+      anchored.x = o.base.x + o.dir.x * o.lift;
+      anchored.y = o.base.y + o.dir.y * o.lift + o.height;
+      anchored.z = o.base.z + o.dir.z * o.lift;
+      return anchored;
     },
     // For checking in a hidden tab, where frames barely run: step time forward and draw.
     advance(seconds = 0) {
       let left = seconds;
       do {
-        const dt = Math.min(0.05, left);
-        updateCamera(dt);
-        view.dist = rig.dist;
-        updateBuildings(dt);
-        sky.update(dt, view);
-        left -= dt;
+        step(Math.min(0.05, left));
+        left -= 0.05;
       } while (left > 0);
-      train?.update(performance.now() / 1000);
-      renderer.render(scene, camera);
-      checkLeave();
+      draw();
       handlers.current.onFrame?.();
       return {
         ...renderer.info.render,
-        active: activeArea,
+        where: place.id,
+        veil: Math.round(veil * 100) / 100,
         flying: Boolean(rig.fly),
         dist: Math.round(rig.dist * 10) / 10,
         target: rig.target.toArray().map((v) => Math.round(v * 10) / 10),
@@ -511,6 +579,12 @@ export function createTown({ host, canvas, layout, conditions, handlers, reduced
       ro.disconnect();
       for (const [el, type, fn, opts] of listeners) el.removeEventListener(type, fn, opts);
       canvas.style.cursor = '';
+      ring.removeFromParent();
+      ringGeo.dispose();
+      ringMat.dispose();
+      veilQuad.geometry.dispose();
+      veilMat.dispose();
+      for (const p of interiors.values()) p.dispose();
       sky.dispose();
       scene.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
