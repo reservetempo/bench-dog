@@ -11,6 +11,7 @@ const LINKS = [
   { href: 'https://reservetempo.github.io/logic-king/', label: 'logic king' },
   { href: '/dump', label: 'dump' },
   { href: 'https://reservetempo.github.io/html-dump/', label: 'html dump' },
+  { href: 'https://reservetempo.github.io/learning-feed/', label: 'learning feed' },
 ];
 
 export default function Home() {
