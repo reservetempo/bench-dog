@@ -13,6 +13,7 @@ const LINKS = [
   { href: 'https://reservetempo.github.io/html-dump/', label: 'html dump' },
   { href: 'https://reservetempo.github.io/learning-feed/', label: 'learning feed' },
   { href: 'https://reservetempo.github.io/desktop-manager-plan/', label: 'desktop manager plan' },
+  { href: 'https://reservetempo.github.io/project-manager-tree/', label: 'project manager tree' },
 ];
 
 export default function Home() {
