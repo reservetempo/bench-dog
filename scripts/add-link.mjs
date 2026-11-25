@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Add a link (or an empty folder) to the homepage in app/desktop/tree.json. The homepage
 // draws it as an old one-bit desktop (app/desktop/Desktop.jsx): each folder is a folder
-// icon that opens into a window, and each link is a document icon.
+// icon that opens into a window, and each link is a document icon. To give it a low-poly
+// figurine instead, add a model in app/desktop/models/ and list it in models/index.js.
 // A folder or link with "hidden": true stays in the file but isn't drawn; this script keeps it.
 //
 //   node scripts/add-link.mjs --list

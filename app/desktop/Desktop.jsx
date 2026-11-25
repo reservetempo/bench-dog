@@ -4,7 +4,8 @@
 // The folders and links come from tree.json (see scripts/add-link.mjs).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { PixelIcon, DitherDefs } from './icons';
+import { DitherDefs } from './icons';
+import Figurine from './Figurine';
 import styles from './desktop.module.css';
 
 const SITE_NAME = 'dominic_my_website';
@@ -230,7 +231,14 @@ function Item({ item, path, ctx }) {
   );
   const direct = (e) => e.detail === 0 || ctx.lastPointer.current === 'touch' || ctx.lastPointer.current === 'pen';
   const icon = (
-    <PixelIcon kind={folder ? 'folder' : 'document'} lineClass={styles.iconLine} fillClass={styles.iconFill} />
+    <Figurine
+      name={item.name}
+      kind={folder ? 'folder' : 'document'}
+      selected={ctx.selected === path}
+      open={open}
+      lineClass={styles.iconLine}
+      fillClass={styles.iconFill}
+    />
   );
   const label = <span className={styles.label}>{item.name}</span>;
 

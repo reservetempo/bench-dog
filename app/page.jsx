@@ -1,7 +1,8 @@
 // /app/page.jsx
-// The homepage is an old one-bit desktop: each folder in app/desktop/tree.json is a folder
-// icon that opens into a window, and each link is a document icon. Add a link with
-// scripts/add-link.mjs.
+// The homepage is an old one-bit desktop: each folder in app/desktop/tree.json opens into a
+// window, and each link goes to its page. Each item is drawn as a low-poly figurine
+// (app/desktop/models/, registered in models/index.js), or as a pixel folder or document icon
+// when it has none. Add a link with scripts/add-link.mjs.
 
 import { Pixelify_Sans } from 'next/font/google';
 import Desktop from './desktop/Desktop';
