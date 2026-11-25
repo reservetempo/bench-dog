@@ -24,5 +24,6 @@ export const MODELS = {
   'calculus spivak': entry(() => import('./calculus-spivak.js'), ['#03045e', '#0077b6', '#ffd60a']),
   AI: entry(() => import('./ai.js'), ['#ff2fb9', '#7b61ff', '#a8f4ff']),
   'attention is all you need': entry(() => import('./attention.js'), ['#7209b7', '#00b4d8', '#ffffff']),
+  'analog oscillator recipes': entry(() => import('./oscillator.js'), ['#0b1f3a', '#ff7a00', '#d8f3ff']),
   bread: entry(() => import('./bread.js'), ['#5a3510', '#c8731e', '#f3b44c']),
 };

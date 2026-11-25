@@ -26,6 +26,7 @@
       "hidden": true,
       "items": []
     },
-    { "name": "bread", "href": "https://reservetempo.github.io/bread-recipes/" }
+    { "name": "bread", "href": "https://reservetempo.github.io/bread-recipes/" },
+    { "name": "analog oscillator recipes", "href": "https://github.com/reservetempo/analog-oscillator-recipes" }
   ]
 }
