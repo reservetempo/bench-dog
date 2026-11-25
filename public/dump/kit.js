@@ -460,32 +460,66 @@ function eyePatch(headRadius, w, h) {
 }
 
 // One painted eye drawn on a canvas, as a patch that sits on a sphere-ish head.
-// Put the mesh at the head's centre; rotate it (y = left/right, x = up/down) to move it on the surface.
+// Put the mesh at the head's centre; rotate it (y = left/right, x = up/down, and
+// z to tilt it in place) to move it on the surface.
 //   headRadius, w, h      head radius and eye size (units)
 //   sclera, iris, pupil   CSS colours (iris/pupil null to skip)
 //   irisSize              iris diameter as a fraction of the eye width (0–1)
-//   highlights            number of white highlights (0–3)
-//   lid                   0–1, how far the upper lid comes down (lidColor)
+//   highlights            number of white highlights (0–5), or a list of [x, y, r]
+//                         in eye half-widths/half-heights from the centre
+//   lid                   0–1, how far the upper lid comes down (lidColor; null cuts
+//                         the lid away so the skin underneath shows through)
 //   ring                  CSS colour for a dark ring under the eye, or null
 //   closed                draw a closed, curved line instead
 //   shape                 'oval' or 'round'; lit = true uses a Lambert material
+// Anime extras (all optional):
+//   irisH                 iris height / width (1 = round, 1.3 = tall anime oval)
+//   irisY                 iris centre below the eye centre, in eye half-heights
+//   irisTop               colour at the top of the iris (vertical gradient, dark top)
+//   irisRim               colour of a thin ring round the iris
+//   glint                 colour of a bright crescent in the lower iris (wet/glossy look)
+//   shadow                colour (use rgba) of the lid's shadow over the top of the eye
+//   lash                  upper lash line thickness, as a fraction of the texture width
+//   wing                  0–1, flick at the outer corner of the upper line (drawn on +x)
+//   lower                 lower lash line thickness at the outer corner (0 = none)
+//   flip                  mirror the eye (for the eye on the -x side, so wings point out)
+//   res                   canvas size in pixels (default 128)
+const EYE_HIGHLIGHTS = [[-0.3, -0.35, 0.22], [0.28, 0.25, 0.12], [-0.05, 0.4, 0.08], [0.36, -0.28, 0.07], [-0.36, 0.14, 0.055]];
 export function paintedEye({
   headRadius = 0.12, w = 0.06, h = 0.07,
   sclera = '#f4efe4', iris = '#3a2a20', pupil = '#000000', irisSize = 0.6,
   highlights = 1, lid = 0, lidColor = '#d9b99a', ring = null, closed = false,
   line = '#111111', shape = 'oval', lit = false,
+  irisH = 1, irisY = 0.08, irisTop = null, irisRim = null, glint = null, shadow = null,
+  lash = 0.07, wing = 0, lower = 0, flip = false, res = 128,
 } = {}) {
-  const opts = { sclera, iris, pupil, irisSize, highlights, lid, lidColor, ring, closed, line, shape, lit };
+  const opts = {
+    sclera, iris, pupil, irisSize, highlights, lid, lidColor, ring, closed, line, shape, lit,
+    irisH, irisY, irisTop, irisRim, glint, shadow, lash, wing, lower, res,
+  };
   const key = JSON.stringify(opts);
   if (!eyeMats.has(key)) {
-    const tex = canvasTexture(64, 64, (ctx, W, H) => {
-      const cx = W / 2, cy = H / 2, rx = W * 0.42, ry = shape === 'round' ? W * 0.42 : H * 0.46;
+    const tex = canvasTexture(res, res, (ctx, W, H) => {
+      // Leave room on the right for the wing.
+      const rx = W * (wing > 0 ? 0.39 : 0.42), cx = wing > 0 ? W * 0.45 : W / 2, cy = H / 2;
+      const ry = shape === 'round' ? rx : H * 0.46;
+      const lw = W * lash;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      const flick = (x0, y0) => {
+        if (wing <= 0) return;
+        ctx.fillStyle = line;
+        ctx.beginPath();
+        ctx.moveTo(x0 - W * 0.1, y0 - lw * 0.55);
+        ctx.lineTo(Math.min(W - 1, x0 + W * 0.13 * wing), y0 - H * 0.1 * wing);
+        ctx.lineTo(x0 - W * 0.03, y0 + lw * 0.6);
+        ctx.closePath(); ctx.fill();
+      };
       if (ring) {
         ctx.fillStyle = ring;
         ctx.beginPath(); ctx.ellipse(cx, cy + ry * 0.35, rx * 1.05, ry * 0.85, 0, 0, Math.PI * 2); ctx.fill();
       }
       if (closed) {
-        ctx.strokeStyle = line; ctx.lineWidth = W * 0.09; ctx.lineCap = 'round';
+        ctx.strokeStyle = line; ctx.lineWidth = Math.max(W * 0.09, lw);
         ctx.beginPath(); ctx.ellipse(cx, cy - ry * 0.2, rx * 0.85, ry * 0.45, 0, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
         return;
       }
@@ -494,32 +528,69 @@ export function paintedEye({
       ctx.fillStyle = sclera; ctx.fill();
       ctx.clip();
       if (iris) {
-        const ir = rx * irisSize * 1.25;
-        const g = ctx.createRadialGradient(cx, cy + ir * 0.2, ir * 0.2, cx, cy, ir);
-        g.addColorStop(0, iris); g.addColorStop(1, shade(iris, -0.45));
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy + ry * 0.08, ir, 0, Math.PI * 2); ctx.fill();
-        if (pupil) { ctx.fillStyle = pupil; ctx.beginPath(); ctx.arc(cx, cy + ry * 0.08, ir * 0.45, 0, Math.PI * 2); ctx.fill(); }
+        const ir = rx * irisSize * 1.25, irh = ir * irisH, iy = cy + ry * irisY;
+        let g;
+        if (irisTop) {
+          g = ctx.createLinearGradient(0, iy - irh, 0, iy + irh);
+          g.addColorStop(0, irisTop); g.addColorStop(0.5, iris); g.addColorStop(1, shade(iris, 0.3));
+        } else {
+          g = ctx.createRadialGradient(cx, iy + irh * 0.2, ir * 0.2, cx, iy, Math.max(ir, irh));
+          g.addColorStop(0, iris); g.addColorStop(1, shade(iris, -0.45));
+        }
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, iy, ir, irh, 0, 0, Math.PI * 2); ctx.fill();
+        if (glint) {
+          ctx.fillStyle = glint;
+          ctx.beginPath(); ctx.ellipse(cx, iy + irh * 0.55, ir * 0.72, irh * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        if (pupil) { ctx.fillStyle = pupil; ctx.beginPath(); ctx.ellipse(cx, iy, ir * 0.45, irh * 0.45, 0, 0, Math.PI * 2); ctx.fill(); }
+        if (irisRim) {
+          ctx.strokeStyle = irisRim; ctx.lineWidth = W * 0.03;
+          ctx.beginPath(); ctx.ellipse(cx, iy, ir, irh, 0, 0, Math.PI * 2); ctx.stroke();
+        }
       }
-      if (lid > 0) {
-        ctx.fillStyle = lidColor;
-        ctx.fillRect(0, 0, W, cy - ry + ry * 2 * lid);
-        ctx.strokeStyle = line; ctx.lineWidth = W * 0.06;
-        ctx.beginPath(); ctx.moveTo(0, cy - ry + ry * 2 * lid); ctx.lineTo(W, cy - ry + ry * 2 * lid); ctx.stroke();
+      if (shadow) {
+        ctx.fillStyle = shadow;
+        ctx.beginPath(); ctx.ellipse(cx, cy - ry * 1.02, rx * 1.3, ry * 0.58, 0, 0, Math.PI * 2); ctx.fill();
       }
       ctx.fillStyle = '#ffffff';
-      const hl = [[-0.3, -0.35, 0.22], [0.28, 0.25, 0.12], [-0.05, 0.4, 0.08]];
-      for (let i = 0; i < Math.min(highlights, 3); i++) {
-        const [hx, hy, hr] = hl[i];
+      const hl = Array.isArray(highlights) ? highlights : EYE_HIGHLIGHTS.slice(0, Math.max(0, highlights | 0));
+      for (const [hx, hy, hr] of hl) {
         ctx.beginPath(); ctx.arc(cx + hx * rx, cy + hy * ry, hr * rx, 0, Math.PI * 2); ctx.fill();
       }
+      // Upper lid: comes down to a gently arched edge at topY.
+      const topY = cy - ry + ry * 2 * Math.min(Math.max(lid, 0), 0.95);
+      const dy = (topY - cy) / ry, half = rx * Math.sqrt(Math.max(0, 1 - dy * dy));
+      const lidEdge = () => { ctx.moveTo(cx - half, topY); ctx.quadraticCurveTo(cx, topY - ry * 0.3, cx + half, topY); };
+      if (lid > 0) {
+        ctx.beginPath(); lidEdge();
+        ctx.lineTo(W, topY); ctx.lineTo(W, 0); ctx.lineTo(0, 0); ctx.lineTo(0, topY); ctx.closePath();
+        if (lidColor) { ctx.fillStyle = lidColor; ctx.fill(); }
+        else { ctx.globalCompositeOperation = 'destination-out'; ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+      }
       ctx.restore();
-      ctx.strokeStyle = line; ctx.lineWidth = W * 0.07;
-      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+      ctx.fillStyle = line; ctx.strokeStyle = line;
+      if (lid > 0) {
+        ctx.lineWidth = lw;
+        ctx.beginPath(); lidEdge(); ctx.stroke();
+        flick(cx + half, topY);
+      } else {
+        // Crescent lash line, thickest at the top, tapering into the corners.
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx + lw * 0.25, ry + lw * 0.45, 0, Math.PI, Math.PI * 2);
+        ctx.ellipse(cx, cy + lw * 0.55, rx * 0.98, ry, 0, Math.PI * 2, Math.PI, true);
+        ctx.closePath(); ctx.fill();
+        flick(cx + rx, cy - lw * 0.2);
+      }
+      if (lower > 0) {
+        ctx.lineWidth = W * lower;
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.99, ry * 0.99, 0, Math.PI * 0.06, Math.PI * 0.6); ctx.stroke();
+      }
     });
     const Mat = lit ? THREE.MeshLambertMaterial : THREE.MeshBasicMaterial;
     eyeMats.set(key, new Mat({ map: tex, alphaTest: 0.5, transparent: false }));
   }
   const m = new THREE.Mesh(eyePatch(headRadius, w, h), eyeMats.get(key));
+  if (flip) m.scale.x = -1;
   m.userData.noOutline = true;
   return m;
 }

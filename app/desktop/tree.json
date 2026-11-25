@@ -1,0 +1,31 @@
+{
+  "items": [
+    { "name": "archive", "href": "/archive" },
+    { "name": "sequencer", "href": "/sequencer" },
+    { "name": "blog", "href": "/blog" },
+    { "name": "units", "href": "/units" },
+    { "name": "sap-1", "href": "https://reservetempo.github.io/sap-computer/" },
+    { "name": "dump", "href": "/dump" },
+    { "name": "learning feed", "href": "https://reservetempo.github.io/learning-feed/" },
+    { "name": "euclid", "href": "https://reservetempo.github.io/Euclid/" },
+    { "name": "unit tree", "href": "https://github.com/reservetempo/unit-tree" },
+    { "name": "studio 414", "href": "https://reservetempo.github.io/studio-414/" },
+    { "name": "mudmuddd", "href": "https://mudmuddd.vercel.app" },
+    { "name": "design framework", "href": "https://reservetempo.github.io/design-framework/" },
+    { "name": "website framework", "href": "https://github.com/reservetempo/website-framework" },
+    { "name": "diagram types", "href": "https://reservetempo.github.io/diagram-types/" },
+    { "name": "calculus spivak", "href": "https://reservetempo.github.io/calculus-spivak/" },
+    {
+      "name": "AI",
+      "items": [
+        { "name": "attention is all you need", "href": "https://reservetempo.github.io/attention-is-all-you-need-breakdown/" }
+      ]
+    },
+    {
+      "name": "untitled folder",
+      "hidden": true,
+      "items": []
+    },
+    { "name": "bread", "href": "https://reservetempo.github.io/bread-recipes/" }
+  ]
+}

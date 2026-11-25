@@ -18,13 +18,10 @@ const nextConfig = {
       { source: '/dump', destination: '/dump/index.html' },
     ];
   },
-  // SAP-1 and the gates game (Lords & Logicians) moved to their own sites;
-  // keep old /sap1, /gates (design doc) and /gates/play links working
+  // SAP-1 moved to its own site; keep old /sap1 links working
   async redirects() {
     return [
       { source: '/sap1', destination: 'https://reservetempo.github.io/sap-computer/', permanent: true },
-      { source: '/gates', destination: 'https://reservetempo.github.io/logic-king/design/', permanent: true },
-      { source: '/gates/play', destination: 'https://reservetempo.github.io/logic-king/', permanent: true },
     ];
   },
 };
